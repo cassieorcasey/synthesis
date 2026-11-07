@@ -27,6 +27,8 @@ Tambahkan `?demo` di URL untuk mencoba dengan data contoh. Data mode ini tersimp
 - **Klik kategori** untuk membuka cabangnya. Klik lagi saat terpilih untuk melipatnya. Lingkaran putus-putus dan tanda + menandakan cabang yang masih terlipat.
 - **Klik materi** untuk membuka panel sumber. Video YouTube bisa diputar langsung di panel, dan link `?t=` ikut menentukan detik mulai.
 - **Tambah sumber**: tempel link, lalu jenis dan judul terisi otomatis bila bisa.
+- **Kelompok sumber**: beri kelompok seperti Penjelasan, Latihan soal, atau Pembahasan. Panel lalu menampilkan sumber per kelompok, dan tombol "+ Tambah" di tiap kelompok langsung mengisi kelompoknya.
+- **Jadikan subkategori**: kalau satu materi ternyata perlu dipecah menjadi sub-topik, tombol ini mengubahnya menjadi subkategori di tempat yang sama. Sumber dan catatannya pindah ke materi pertama di dalamnya (default "Pengantar").
 - **Cari** dengan tombol `/` di laptop. Pencarian mencakup kategori, materi, dan judul sumber.
 - **Hapus subkategori**: isinya naik ke induknya. Kategori utama hanya bisa dihapus kalau sudah kosong.
 - Materi berbentuk lingkaran pudar artinya belum punya sumber.
@@ -37,6 +39,6 @@ Tambahkan `?demo` di URL untuk mencoba dengan data contoh. Data mode ini tersimp
 |---|---|
 | `peta_kategori` | `nama`, `parent_id` (null = kategori utama), `warna` (null = ikut induk) |
 | `peta_materi` | `judul`, `catatan`, `kategori_id` |
-| `peta_sumber` | `url`, `judul`, `jenis` (`youtube` / `web` / `pdf` / `lainnya`), `materi_id` |
+| `peta_sumber` | `url`, `judul`, `jenis` (`youtube` / `web` / `pdf` / `lainnya`), `kelompok` (opsional), `materi_id` |
 
 Database menolak siklus antar-kategori, menolak penghapusan kategori yang masih berisi, dan menghapus sumber bersama materinya.

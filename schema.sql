@@ -95,6 +95,12 @@ create table if not exists public.peta_sumber (
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+-- v1.1: kelompok sumber dalam satu materi (Penjelasan, Latihan soal, Pembahasan, ...). null = tanpa kelompok.
+alter table public.peta_sumber add column if not exists kelompok text;
+alter table public.peta_sumber drop constraint if exists peta_sumber_kelompok_check;
+alter table public.peta_sumber add constraint peta_sumber_kelompok_check
+  check (kelompok is null or length(trim(kelompok)) between 1 and 40);
+
 create index if not exists peta_sumber_user_idx   on public.peta_sumber (user_id);
 create index if not exists peta_sumber_materi_idx on public.peta_sumber (materi_id);
 

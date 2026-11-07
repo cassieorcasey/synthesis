@@ -287,7 +287,9 @@ button { cursor: pointer; }
 .hint { margin: 0; font-size: 13.5px; color: var(--fg-2); }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn-row .btn { flex: 1 1 140px; }
-.panel-foot { display: flex; justify-content: space-between; gap: 8px; padding-top: 14px; border-top: 1px solid var(--hair); }
+.foot-l { display: flex; flex-wrap: wrap; gap: 8px; }
+.panel-foot { align-items: center; }
+.panel-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding-top: 14px; border-top: 1px solid var(--hair); }
 
 /* kartu sumber (gaya rich link Freeform / kartu Craft) */
 .src { border-radius: 16px; background: var(--field); border: 1px solid var(--hair); overflow: hidden; position: relative; }
@@ -319,6 +321,13 @@ a.txt:hover .t { text-decoration: underline; text-underline-offset: 2px; }
 .src .acts .icon-btn { width: 32px; height: 32px; }
 
 /* form sumber di dalam panel */
+.grp { display: flex; flex-direction: column; gap: 10px; }
+.grp + .grp { margin-top: 6px; }
+.grp-h { display: flex; align-items: center; gap: 8px; margin: 0; }
+.grp-h h4 { margin: 0; font: 600 17px/1.25 var(--font-serif); flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.grp-h h4.none { font: 600 13px/1.2 var(--font-ui); color: var(--fg-3); }
+.grp-h .n { font-size: 12.5px; color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.grp-h .mini svg { width: 11px; height: 11px; vertical-align: -1px; margin-right: 3px; }
 .srcform { border-radius: 16px; background: var(--fill); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .srcform .row-end { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
 
@@ -402,6 +411,7 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
   .empty { left: 50%; }
   dialog.sheet { width: 100%; max-width: 100%; margin: auto 0 0; max-height: 94%; border-radius: var(--r-lg) var(--r-lg) 0 0; }
   .toast { bottom: calc(var(--bottom) + 64px); }
+  body.panel-open .toast { bottom: auto; top: calc(var(--top) + 110px); }
   .seg span { font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -541,6 +551,57 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
   </form>
 </dialog>
 
+<!-- Jadikan subkategori -->
+<dialog class="sheet" id="dlg-split" aria-labelledby="fs-title">
+  <form id="form-split" novalidate>
+    <header>
+      <h2 id="fs-title">Jadikan subkategori</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Tutup"><svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button>
+    </header>
+    <div class="fields">
+      <p class="hint" id="fs-intro"></p>
+      <label class="field"><span>Nama subkategori</span>
+        <input type="text" id="fs-kat" autocomplete="off">
+        <p class="err" id="fs-kat-err" hidden>Nama subkategori wajib diisi.</p>
+      </label>
+      <label class="field"><span>Materi pertama di dalamnya</span>
+        <input type="text" id="fs-mat" autocomplete="off" placeholder="Contoh: Perkalian bilangan berpangkat">
+        <p class="err" id="fs-mat-err" hidden>Nama materi wajib diisi.</p>
+        <p class="help" id="fs-mat-help"></p>
+      </label>
+    </div>
+    <footer>
+      <button type="button" class="btn" data-close>Batal</button>
+      <button type="submit" class="btn primary" id="fs-submit">Jadikan subkategori</button>
+    </footer>
+  </form>
+</dialog>
+
+<!-- Jadikan subkategori -->
+<dialog class="sheet" id="dlg-conv" aria-labelledby="fc-title">
+  <form id="form-conv" novalidate>
+    <header>
+      <h2 id="fc-title">Jadikan subkategori</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Tutup"><svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button>
+    </header>
+    <div class="fields">
+      <p class="hint">Pakai ini kalau materi ternyata perlu dipecah menjadi beberapa sub-topik, misalnya Sifat-Sifat Bilangan Berpangkat menjadi Perkalian, Pembagian, dan Pangkat Negatif.</p>
+      <label class="field"><span>Nama subkategori</span>
+        <input type="text" id="fc-nama" autocomplete="off">
+        <p class="err" id="fc-nama-err" hidden>Nama wajib diisi.</p>
+      </label>
+      <label class="field" id="fc-keep"><span>Nama materi pertama di dalamnya</span>
+        <input type="text" id="fc-materi" autocomplete="off" placeholder="Pengantar">
+      </label>
+      <p class="help" id="fc-info"></p>
+    </div>
+    <footer>
+      <button type="button" class="btn" data-close>Batal</button>
+      <button type="submit" class="btn primary" id="fc-submit">Jadikan subkategori</button>
+    </footer>
+  </form>
+</dialog>
+
 <!-- Masuk -->
 <dialog class="sheet" id="dlg-login" aria-labelledby="fl-title">
   <form id="form-login" novalidate>
@@ -571,6 +632,18 @@ const T_KAT = 'peta_kategori', T_MAT = 'peta_materi', T_SRC = 'peta_sumber';
 const COLORS = ['indigo', 'teal', 'orange', 'pink', 'blue', 'green', 'purple', 'yellow'];
 const HEX = /^#[0-9a-f]{6}$/i;
 const JENIS = { youtube: 'YouTube', web: 'Web', pdf: 'PDF', lainnya: 'Lainnya' };
+/** Kelompok umum muncul berurutan seperti alur belajar; kelompok lain menyusul menurut abjad; tanpa kelompok paling akhir. */
+const GROUP_ORDER = ['pengantar', 'penjelasan', 'ringkasan', 'contoh soal', 'latihan soal', 'pembahasan', 'referensi'];
+const GROUP_SUGGEST = ['Penjelasan', 'Ringkasan', 'Contoh soal', 'Latihan soal', 'Pembahasan', 'Referensi'];
+const normGroup = v => { const t = String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, 40); return t || null; };
+/** Samakan penulisan dengan kelompok yang sudah ada di materi ini atau saran umum: "pembahasan" → "Pembahasan". */
+const canonGroup = (v, materiId) => {
+  const g = normGroup(v);
+  if (!g) return null;
+  const pool = [...src.filter(x => x.materi_id === materiId).map(x => x.kelompok).filter(Boolean), ...GROUP_SUGGEST];
+  return pool.find(x => x.toLowerCase() === g.toLowerCase()) || g;
+};
+const groupRank = g => { if (!g) return 1000; const i = GROUP_ORDER.indexOf(g.toLowerCase()); return i < 0 ? 100 : i; };
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const canHover = matchMedia('(hover: hover)').matches;
 const isPhone = () => innerWidth <= 760;
@@ -651,7 +724,7 @@ function seedData() {
   const kat = [], mat = [], src = [], id = {};
   const K = (key, nama, parent = null, warna = null) => { id[key] = uuid(); kat.push({ id: id[key], nama, parent_id: parent && id[parent], warna }); };
   const M = (key, kk, judul, catatan = null) => { id[key] = uuid(); mat.push({ id: id[key], kategori_id: id[kk], judul, catatan }); };
-  const S = (mk, url, judul, jenis = detectJenis(url)) => src.push({ id: uuid(), materi_id: id[mk], url, judul, jenis });
+  const S = (mk, url, judul, kelompok = null) => src.push({ id: uuid(), materi_id: id[mk], url, judul, jenis: detectJenis(url), kelompok });
 
   K('mtk', 'Matematika', null, 'indigo');
   K('alj', 'Aljabar', 'mtk');
@@ -663,6 +736,7 @@ function seedData() {
 
   M('pl', 'alj', 'Persamaan Linear', 'Bentuk umum ax + b = 0. Dasar untuk sistem persamaan dan regresi.');
   M('fk', 'alj', 'Fungsi Kuadrat');
+  M('pangkat', 'alj', 'Sifat-Sifat Bilangan Berpangkat', 'aᵐ · aⁿ = aᵐ⁺ⁿ,  aᵐ : aⁿ = aᵐ⁻ⁿ,  (aᵐ)ⁿ = aᵐⁿ,  a⁰ = 1,  a⁻ⁿ = 1/aⁿ');
   M('vek', 'lin', 'Vektor', 'Vektor sebagai panah, sebagai daftar angka, dan sebagai elemen ruang vektor.');
   M('mm', 'lin', 'Perkalian Matriks');
   M('det', 'lin', 'Determinan', 'Determinan = faktor perubahan luas/volume oleh transformasi linear.\nNol berarti matriks tidak punya invers.');
@@ -673,13 +747,16 @@ function seedData() {
   M('bigo', 'prg', 'Notasi Big-O');
   M('reg', 'ml', 'Regresi Linear');
 
-  S('pl', 'https://www.khanacademy.org/math/algebra', 'Khan Academy: Algebra 1');
-  S('pl', 'https://id.wikipedia.org/wiki/Persamaan_linear', 'Persamaan linear');
+  S('pl', 'https://www.khanacademy.org/math/algebra', 'Khan Academy: Algebra 1', 'Latihan soal');
+  S('pl', 'https://id.wikipedia.org/wiki/Persamaan_linear', 'Persamaan linear', 'Penjelasan');
   S('fk', 'https://id.wikipedia.org/wiki/Fungsi_kuadrat', 'Fungsi kuadrat');
+  S('pangkat', 'https://id.wikipedia.org/wiki/Eksponensiasi', 'Eksponensiasi', 'Penjelasan');
+  S('pangkat', 'https://www.khanacademy.org/math/algebra', 'Khan Academy: Algebra 1', 'Latihan soal');
   S('vek', 'https://www.youtube.com/watch?v=fNk_zzaMoSs', 'Vectors | Essence of linear algebra, chapter 1');
   S('mm', 'https://www.youtube.com/watch?v=XkY2DOUCWMU', 'Matrix multiplication as composition');
-  S('det', 'https://www.youtube.com/watch?v=Ip3X9LOh2dk', 'The determinant | Essence of linear algebra, chapter 6');
-  S('det', 'https://id.wikipedia.org/wiki/Determinan', 'Determinan');
+  S('det', 'https://www.youtube.com/watch?v=Ip3X9LOh2dk', 'The determinant | Essence of linear algebra, chapter 6', 'Penjelasan');
+  S('det', 'https://id.wikipedia.org/wiki/Determinan', 'Determinan', 'Ringkasan');
+  S('det', 'https://en.wikipedia.org/wiki/Laplace_expansion', 'Laplace expansion', 'Latihan soal');
   S('graf', 'https://id.wikipedia.org/wiki/Teori_graf', 'Teori graf');
   S('lc', 'https://docs.python.org/3/tutorial/datastructures.html#list-comprehensions', 'Data Structures: List Comprehensions');
   S('dc', 'https://docs.python.org/3/library/dataclasses.html', 'dataclasses — Data Classes');
@@ -698,7 +775,7 @@ const TABLE_KEY = { [T_KAT]: 'kat', [T_MAT]: 'mat', [T_SRC]: 'src' };
 const COLS = {
   [T_KAT]: ['id', 'parent_id', 'nama', 'warna'],
   [T_MAT]: ['id', 'kategori_id', 'judul', 'catatan'],
-  [T_SRC]: ['id', 'materi_id', 'jenis', 'url', 'judul'],
+  [T_SRC]: ['id', 'materi_id', 'jenis', 'url', 'judul', 'kelompok'],
 };
 const pick = (o, keys) => Object.fromEntries(keys.map(k => [k, o[k] ?? null]));
 
@@ -773,7 +850,8 @@ function derive() {
   for (const v of d.kids.values()) v.sort(byName);
   for (const v of d.mats.values()) v.sort(byName);
   const JO = { youtube: 0, web: 1, pdf: 2, lainnya: 3 };
-  for (const v of d.srcs.values()) v.sort((a, b) => (JO[a.jenis] ?? 9) - (JO[b.jenis] ?? 9) || coll.compare(a.judul || '', b.judul || ''));
+  for (const v of d.srcs.values()) v.sort((a, b) => groupRank(a.kelompok) - groupRank(b.kelompok) || coll.compare(a.kelompok || '', b.kelompok || '')
+    || (JO[a.jenis] ?? 9) - (JO[b.jenis] ?? 9) || coll.compare(a.judul || '', b.judul || ''));
   // kedalaman dan warna efektif: warna sendiri, atau warisan dari leluhur terdekat yang punya warna
   const walk = (id, depth, inherited, i) => {
     const k = byId.get(id);
@@ -1077,7 +1155,7 @@ function searchResults(q) {
   for (const x of src) {
     const t = x.judul || hostOf(x.url);
     const s = score(t);
-    if (s >= 0 && byId.has(x.materi_id)) out.push({ s: s + 0.2, id: x.materi_id, srcId: x.id, icon: x.jenis, title: t, sub: `Sumber · ${nameOf(x.materi_id)}` });
+    if (s >= 0 && byId.has(x.materi_id)) out.push({ s: s + 0.2, id: x.materi_id, srcId: x.id, icon: x.jenis, title: t, sub: `${x.kelompok || 'Sumber'} · ${nameOf(x.materi_id)}` });
   }
   return out.sort((a, b) => a.s - b.s || coll.compare(a.title, b.title)).slice(0, 14);
 }
@@ -1164,6 +1242,7 @@ const panelEl = $('#panel');
 const xIcon = '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>';
 const pencil = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 2.8l2.7 2.7L6 12.7 2.8 13.2l.5-3.2z"></path></svg>';
 const plus = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>';
+const branch = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="4" cy="3.5" r="1.8"></circle><circle cx="12" cy="8" r="1.8"></circle><circle cx="4" cy="12.5" r="1.8"></circle><path d="M4 5.3v5.4M5.6 4.4c3 .6 4.3 1.8 4.6 3.1"></path></svg>';
 const chev = '<svg width="8" height="12" viewBox="0 0 8 12" aria-hidden="true"><path d="M1.5 1.5L6 6l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
 
 function crumbs(id, label) {
@@ -1200,6 +1279,8 @@ function srcFormHTML(s) {
     <label class="field"><span>Link</span><input type="url" name="url" inputmode="url" autocomplete="off" placeholder="Tempel link YouTube, artikel, atau PDF" value="${esc(s?.url || '')}"></label>
     <p class="err" data-err="url" hidden>Link harus diawali http:// atau https://</p>
     <label class="field"><span>Judul</span><input type="text" name="judul" autocomplete="off" placeholder="Terisi otomatis dari link bila bisa" value="${esc(s?.judul || '')}"></label>
+    ${s ? `<label class="field"><span>Materi</span><select name="materi">${matOptions(s.materi_id)}</select></label>` : ''}
+    <label class="field"><span>Kelompok (opsional)</span><input type="text" name="kelompok" list="grp-suggest" autocomplete="off" maxlength="40" placeholder="Misalnya Penjelasan, Latihan soal" value="${esc(s ? s.kelompok || '' : srcEdit?.kelompok || '')}"></label>
     <fieldset class="field"><legend>Jenis</legend><div class="seg">
       ${Object.entries(JENIS).map(([k, v]) => `<label><input type="radio" name="jenis" value="${k}"${k === jenis ? ' checked' : ''}><span>${v}</span></label>`).join('')}
     </div></fieldset>
@@ -1210,11 +1291,36 @@ function srcFormHTML(s) {
   </form>`;
 }
 
+/** Semua materi sebagai pilihan, diberi jalur kategorinya dan diurutkan per cabang. */
+function matOptions(current) {
+  return mat.map(m => ({ id: m.id, label: `${pathOf(m.kategori_id)} › ${m.judul}` }))
+    .sort((a, b) => coll.compare(a.label, b.label))
+    .map(o => `<option value="${o.id}"${o.id === current ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+}
+
 function materiPanel(n) {
   const list = D.srcs.get(n.id) || [];
   const editingId = srcEdit?.materiId === n.id ? srcEdit.id : undefined;
-  const cards = list.map(s => (editingId === s.id ? srcFormHTML(s) : srcCard(s))).join('');
   const adding = editingId === null;
+  const card = s => (editingId === s.id ? srcFormHTML(s) : srcCard(s));
+  // kelompokkan tanpa membedakan huruf besar/kecil; label memakai penulisan pertama
+  const groups = [];
+  for (const s of list) {
+    const key = (s.kelompok || '').toLowerCase();
+    let g = groups.find(x => x.key === key);
+    if (!g) groups.push(g = { key, label: s.kelompok, items: [] });
+    g.items.push(s);
+  }
+  const grouped = groups.some(g => g.key);
+  const addBtn = label => `<button type="button" class="mini" data-act="src-add" data-kelompok="${esc(label || '')}" aria-label="Tambah sumber ke ${esc(label || 'tanpa kelompok')}">${plus}Tambah</button>`;
+  const body = grouped
+    ? groups.map(g => `<div class="grp">
+        <div class="grp-h"><h4 class="${g.key ? '' : 'none'}">${g.key ? esc(g.label) : 'Tanpa kelompok'}</h4><span class="n">${g.items.length}</span>${adding ? '' : addBtn(g.label)}</div>
+        ${g.items.map(card).join('')}</div>`).join('')
+    : list.map(card).join('');
+  // datalist: kelompok yang sudah dipakai di materi ini dulu, lalu saran umum
+  const used = [...new Set(list.map(s => s.kelompok).filter(Boolean))];
+  const suggest = [...used, ...GROUP_SUGGEST.filter(x => !used.some(u => u.toLowerCase() === x.toLowerCase()))];
   return `
     <div class="panel-body">
       ${crumbs(n.id)}
@@ -1222,13 +1328,17 @@ function materiPanel(n) {
       ${n.catatan ? `<p class="prose">${esc(n.catatan)}</p>` : ''}
       <section class="sec">
         <div class="sec-h"><h3>Sumber belajar</h3><span class="n">${list.length || ''}</span></div>
-        ${cards}
+        ${body}
         ${adding ? srcFormHTML(null) : `<button type="button" class="btn" data-act="src-add">${plus}Tambah sumber</button>`}
-        ${!list.length && !adding ? '<p class="hint">Belum ada sumber. Tempel link YouTube, artikel, atau PDF dari Drive.</p>' : ''}
+        ${!list.length && !adding ? '<p class="hint">Belum ada sumber. Tempel link YouTube, artikel, atau PDF dari Drive. Beri kelompok seperti Penjelasan atau Latihan soal kalau sumbernya banyak.</p>' : ''}
+        <datalist id="grp-suggest">${suggest.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist>
       </section>
       <div class="panel-foot">
-        <button type="button" class="btn small" data-act="edit">${pencil}Ubah materi</button>
-        <button type="button" class="btn small danger-text" data-act="delete">Hapus materi</button>
+        <span class="foot-l">
+          <button type="button" class="btn small" data-act="edit">${pencil}Ubah</button>
+          <button type="button" class="btn small" data-act="convert" title="Pecah materi ini menjadi beberapa sub-topik">${branch}Jadikan subkategori</button>
+        </span>
+        <button type="button" class="btn small danger-text" data-act="delete">Hapus</button>
       </div>
     </div>`;
 }
@@ -1366,8 +1476,10 @@ panelEl.addEventListener('click', async e => {
     if (act === 'add-mat') return openMatForm(null, { kategoriId: n.id });
     if (act === 'add-sub') return openKatForm(null, { parentId: n.id });
     if (act === 'edit') return n.kind === 'mat' ? openMatForm(n.id) : openKatForm(n.id);
+    if (act === 'split') return openSplit(n.id);
     if (act === 'play') { playing.add(b.dataset.id); return renderPanel(); }
-    if (act === 'src-add') { srcEdit = { materiId: n.id, id: null }; renderPanel(); return focusSrcForm(); }
+    if (act === 'src-add') { srcEdit = { materiId: n.id, id: null, kelompok: b.dataset.kelompok || '' }; renderPanel(); return focusSrcForm(b.dataset.kelompok ? 'url' : null); }
+    if (act === 'convert') return openConvert(n.id);
     if (act === 'src-edit') { srcEdit = { materiId: n.id, id: b.dataset.id }; playing.delete(b.dataset.id); renderPanel(); return focusSrcForm(); }
     if (act === 'src-cancel') { srcEdit = null; return renderPanel(); }
     if (act === 'src-delete') {
@@ -1404,6 +1516,46 @@ function focusSrcForm() {
   f.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
   if (canHover) f.url.focus();
 }
+
+/* ───────────── Jadikan subkategori ─────────────
+   Materi → subkategori dengan nama yang sama, di tempat yang sama.
+   Kalau materinya punya sumber atau catatan, materi itu tetap ada (ganti nama) di dalam subkategori baru,
+   jadi tidak ada sumber yang hilang. Setelah itu tinggal menambah sub-topik lain di sampingnya. */
+const dlgC = $('#dlg-conv');
+let cctx = null;
+function openConvert(id) {
+  const m = mat.find(x => x.id === id);
+  const keep = (D.srcs.get(id)?.length || 0) > 0 || !!m.catatan;
+  cctx = { id, keep };
+  $('#fc-nama').value = m.judul;
+  $('#fc-materi').value = 'Pengantar';
+  $('#fc-keep').hidden = !keep;
+  $('#fc-nama-err').hidden = true;
+  $('#fc-info').textContent = keep
+    ? `${D.srcs.get(id).length} sumber${m.catatan ? ' dan catatannya' : ''} tetap tersimpan di materi pertama di dalam subkategori ini.`
+    : 'Materi ini belum punya sumber, jadi langsung diganti menjadi subkategori kosong.';
+  dlgC.showModal();
+  if (canHover) $('#fc-nama').focus();
+}
+$('#form-conv').addEventListener('submit', async e => {
+  e.preventDefault();
+  const nama = $('#fc-nama').value.trim();
+  if (!nama) { $('#fc-nama-err').hidden = false; return $('#fc-nama').focus(); }
+  const m = mat.find(x => x.id === cctx.id);
+  const btn = $('#fc-submit');
+  btn.disabled = true;
+  try {
+    const k = await saveKat({ id: uuid(), nama, parent_id: m.kategori_id, warna: null });
+    if (cctx.keep) await saveMat({ ...m, kategori_id: k.id, judul: $('#fc-materi').value.trim() || 'Pengantar' });
+    else await removeMat(m.id);
+    expanded.add(m.kategori_id); expanded.add(k.id); saveOpen();
+    dlgC.close();
+    refresh(0.5);
+    select(k.id);
+    toast('Sekarang jadi subkategori. Tambahkan sub-topiknya lewat tombol Materi.');
+  } catch (err) { failed(err); }
+  finally { btn.disabled = false; }
+});
 function wireSrcForm(f) {
   let titleTouched = !!f.judul.value.trim(), jenisTouched = !!srcEdit?.id, seq = 0, timer;
   f.judul.addEventListener('input', () => { titleTouched = !!f.judul.value.trim(); });
@@ -1429,8 +1581,9 @@ function wireSrcForm(f) {
     if (!safeUrl(url)) { f.querySelector('[data-err="url"]').hidden = false; f.url.focus(); return; }
     const old = srcEdit.id ? src.find(s => s.id === srcEdit.id) : null;
     const row = {
-      id: old?.id || uuid(), materi_id: srcEdit.materiId, url,
+      id: old?.id || uuid(), materi_id: (f.materi && f.materi.value) || srcEdit.materiId, url,
       judul: f.judul.value.trim() || null,
+      kelompok: canonGroup(f.kelompok.value, srcEdit.materiId),
       jenis: f.querySelector('input[name="jenis"]:checked')?.value || detectJenis(url) || 'web',
     };
     const btn = f.querySelector('button[type="submit"]');
@@ -1438,6 +1591,11 @@ function wireSrcForm(f) {
     try {
       const saved = await saveSrc(row);
       srcEdit = null;
+      if (old && saved.materi_id !== old.materi_id) {
+        refresh(0.05);
+        toast(`Sumber dipindah ke ${nameOf(saved.materi_id)}`);
+        return;
+      }
       srcFocus = saved.id;
       refresh(0.05);
       toast(old ? 'Sumber diperbarui' : 'Sumber ditambahkan');
@@ -1566,6 +1724,45 @@ $('#form-mat').addEventListener('submit', async e => {
     select(saved.id);
     if (!old) { srcEdit = { materiId: saved.id, id: null }; renderPanel(); focusSrcForm(); }
     toast(old ? 'Perubahan disimpan' : 'Materi ditambahkan. Tempel link sumbernya di panel.');
+  } catch (err) { failed(err); }
+  finally { btn.disabled = false; }
+});
+
+/* ───────────── Jadikan subkategori ─────────────
+   Materi M di kategori K menjadi subkategori baru C di dalam K. M sendiri pindah ke dalam C
+   sebagai materi pertamanya, lengkap dengan catatan dan semua sumbernya. */
+const dlgS = $('#dlg-split');
+let splitId = null;
+function openSplit(id) {
+  const m = byId.get(id), k = D.srcs.get(id).length;
+  splitId = id;
+  $('#fs-intro').textContent = `"${m.judul}" akan menjadi cabang baru di dalam ${nameOf(m.kategori_id)}. Setelah itu kamu bisa menambah sub-materi lain ke cabang ini.`;
+  $('#fs-kat').value = m.judul;
+  $('#fs-mat').value = '';
+  $('#fs-mat-help').textContent = k
+    ? `${k} sumber${m.catatan ? ' dan catatan' : ''} yang sudah ada ikut ke materi ini. Kamu bisa memindahkan sumber ke sub-materi lain lewat tombol ubah sumber.`
+    : 'Materi ini belum punya sumber.';
+  ['#fs-kat-err', '#fs-mat-err'].forEach(x => { $(x).hidden = true; });
+  dlgS.showModal();
+  if (canHover) $('#fs-mat').focus();
+}
+$('#form-split').addEventListener('submit', async e => {
+  e.preventDefault();
+  const nk = $('#fs-kat').value.trim(), nm = $('#fs-mat').value.trim();
+  $('#fs-kat-err').hidden = !!nk; $('#fs-mat-err').hidden = !!nm;
+  if (!nk) return $('#fs-kat').focus();
+  if (!nm) return $('#fs-mat').focus();
+  const m = mat.find(x => x.id === splitId);
+  const btn = $('#fs-submit');
+  btn.disabled = true;
+  try {
+    const c = await saveKat({ id: uuid(), nama: nk, parent_id: m.kategori_id, warna: null });
+    await saveMat({ ...m, kategori_id: c.id, judul: nm });
+    expanded.add(m.kategori_id); expanded.add(c.id); saveOpen();
+    dlgS.close();
+    refresh(0.6);
+    select(c.id);
+    toast(`${nk} sekarang subkategori. Tambah sub-materi lewat tombol + Materi.`);
   } catch (err) { failed(err); }
   finally { btn.disabled = false; }
 });
