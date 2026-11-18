@@ -958,7 +958,10 @@ const LocalStore = {
     if (table === T_MAT) memDB.src = memDB.src.filter(s => s.materi_id !== id);
     lsSet(LS_KEY, memDB);
   },
-  async reset() { localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_OPEN); return this.load(); },
+  async reset() {
+    try { localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_OPEN); } catch { /* mode privat */ }
+    return this.load();
+  },
 };
 
 async function makeSupabaseStore() {
@@ -968,8 +971,17 @@ async function makeSupabaseStore() {
   return {
     mode: 'supabase', sb,
     async load() {
-      const [k, m, s] = await Promise.all([T_KAT, T_MAT, T_SRC].map(t => sb.from(t).select(COLS[t].join(','))));
-      return { kat: must(k), mat: must(m), src: must(s) };
+      // PostgREST membatasi jumlah baris per permintaan (default 1000): ambil per halaman sampai habis.
+      const all = async t => {
+        const out = [];
+        for (;;) {
+          const rows = must(await sb.from(t).select(COLS[t].join(',')).order('id').range(out.length, out.length + 999));
+          out.push(...rows);
+          if (rows.length < 1000) return out;
+        }
+      };
+      const [k, m, s] = await Promise.all([T_KAT, T_MAT, T_SRC].map(all));
+      return { kat: k, mat: m, src: s };
     },
     async save(table, row) { return must(await sb.from(table).upsert(pick(row, COLS[table])).select(COLS[table].join(',')).single()); },
     async remove(table, id) { must(await sb.from(table).delete().eq('id', id)); },
@@ -1520,7 +1532,9 @@ async function loadNote(s) {
       store.files.signedUrl(s.berkas_path).then(u => fetch(u)).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }),
       mdReady ||= Promise.all(MD_LIBS.map(loadScript)).catch(e => { mdReady = null; throw e; }),
     ]);
-    const raw = extOf(s.berkas_nama) === 'txt' ? `<pre>${esc(text)}</pre>` : window.marked.parse(text);
+    // Hanya .md/.markdown (atau tipe text/markdown) yang dirender; teks lain (.txt, .log, ...) tampil apa adanya.
+    const isMd = ['md', 'markdown'].includes(extOf(s.berkas_nama)) || /markdown/.test(s.berkas_tipe || '');
+    const raw = isMd ? window.marked.parse(text) : `<pre>${esc(text)}</pre>`;
     // Catatan bisa berasal dari orang lain: buang semua yang bisa meniru kontrol app (data-*, style, elemen form).
     const clean = window.DOMPurify.sanitize(raw, {
       USE_PROFILE: { html: true }, ALLOW_DATA_ATTR: false,
@@ -1885,8 +1899,10 @@ function openConvert(id) {
   $('#fc-materi').value = 'Pengantar';
   $('#fc-keep').hidden = !keep;
   $('#fc-nama-err').hidden = true;
+  const nSrc = D.srcs.get(id)?.length || 0;
+  const what = [nSrc ? `${nSrc} sumber` : '', m.catatan ? 'catatannya' : ''].filter(Boolean).join(' dan ');
   $('#fc-info').textContent = keep
-    ? `${D.srcs.get(id).length} sumber${m.catatan ? ' dan catatannya' : ''} tetap tersimpan di materi pertama di dalam subkategori ini.`
+    ? `${what[0].toUpperCase()}${what.slice(1)} tetap tersimpan di materi pertama di dalam subkategori ini.`
     : 'Materi ini belum punya sumber, jadi langsung diganti menjadi subkategori kosong.';
   dlgC.showModal();
   if (canHover) $('#fc-nama').focus();
@@ -1959,10 +1975,11 @@ function wireSubmit(f, fileMode, showFileErr) {
   f.addEventListener('submit', async e => {
     e.preventDefault();
     const old = srcEdit.id ? src.find(s => s.id === srcEdit.id) : null;
+    const materi_id = (f.materi && f.materi.value) || srcEdit.materiId;
     const base = {
-      materi_id: (f.materi && f.materi.value) || srcEdit.materiId,
+      materi_id,
       judul: f.judul.value.trim() || null,
-      kelompok: canonGroup(f.kelompok.value, srcEdit.materiId),
+      kelompok: canonGroup(f.kelompok.value, materi_id),
     };
     let row, file = null, path = null;
     if (old?.berkas_path) {
