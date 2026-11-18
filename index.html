@@ -373,6 +373,21 @@ a.txt:hover .t { text-decoration: underline; text-underline-offset: 2px; }
 .seg span { display: block; text-align: center; border-radius: 9px; padding: 8px 4px; font-size: 13.5px; font-weight: 600; color: var(--fg-2); cursor: pointer; }
 .seg input:checked + span { background: var(--glass-solid); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, .14); }
 .seg input:focus-visible + span { outline: 2.5px solid var(--accent); outline-offset: 1px; }
+.seg.two { grid-template-columns: 1fr 1fr; }
+.seg input:disabled + span { opacity: .45; cursor: not-allowed; }
+.pane { display: flex; flex-direction: column; gap: 7px; }
+.pane[hidden], .field[hidden] { display: none; }
+.drop {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;
+  padding: 18px 12px; border-radius: 12px; border: 1.5px dashed var(--hair-strong, rgba(120, 120, 140, .45));
+  background: var(--glass-solid); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.drop:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--glass-solid)); }
+.drop-t { font-size: 14px; font-weight: 600; color: var(--fg); overflow-wrap: anywhere; }
+.drop-d { font-size: 12.5px; color: var(--fg-3); }
+.file-fixed { margin: 0; font-size: 14px; color: var(--fg-2); overflow-wrap: anywhere; }
 .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
 .swatches label { position: relative; }
 .swatches input { position: absolute; opacity: 0; }
@@ -1451,13 +1466,28 @@ function srcCard(s) {
 
 function srcFormHTML(s) {
   const jenis = s?.jenis || 'web';
-  return `<form class="srcform" id="srcform" novalidate>
+  const isFile = !!s?.berkas_path, canUpload = !!store.files;
+  // sumber baru: pilih Link atau Berkas; sumber lama: jenisnya tetap (file diganti dengan hapus lalu unggah ulang)
+  const mode = s ? '' : `<div class="seg two" role="radiogroup" aria-label="Jenis sumber">
+      <label><input type="radio" name="mode" value="link" checked><span>Link</span></label>
+      <label><input type="radio" name="mode" value="berkas"${canUpload ? '' : ' disabled'}><span>Berkas</span></label>
+    </div>${canUpload ? '' : '<p class="help">Unggah file butuh login. Mode contoh tidak menyimpan file.</p>'}`;
+  const linkPane = isFile
+    ? `<div class="field"><span>File</span><p class="file-fixed">${esc(s.berkas_nama || 'berkas')} · ${fmtSize(s.berkas_ukuran || 0)}</p></div>`
+    : `<div data-pane="link" class="pane">
     <label class="field"><span>Link</span><input type="url" name="url" inputmode="url" autocomplete="off" placeholder="Tempel link YouTube, artikel, atau PDF" value="${esc(s?.url || '')}"></label>
-    <p class="err" data-err="url" hidden>Link harus diawali http:// atau https://</p>
+    <p class="err" data-err="url" hidden>Link harus diawali http:// atau https://</p></div>`;
+  const filePane = s ? '' : `<div data-pane="berkas" class="pane" hidden>
+    <label class="drop"><input type="file" name="berkas">
+      <span class="drop-t">Pilih file atau seret ke sini</span>
+      <span class="drop-d">PDF, Markdown, teks, gambar, dokumen. Maksimal 25 MB.</span></label>
+    <p class="err" data-err="berkas" hidden></p></div>`;
+  return `<form class="srcform" id="srcform" novalidate>
+    ${mode}${linkPane}${filePane}
     <label class="field"><span>Judul</span><input type="text" name="judul" autocomplete="off" placeholder="Terisi otomatis dari link bila bisa" value="${esc(s?.judul || '')}"></label>
     ${s ? `<label class="field"><span>Materi</span><select name="materi">${matOptions(s.materi_id)}</select></label>` : ''}
     <label class="field"><span>Kelompok (opsional)</span><input type="text" name="kelompok" list="grp-suggest" autocomplete="off" maxlength="40" placeholder="Misalnya Penjelasan, Latihan soal" value="${esc(s ? s.kelompok || '' : srcEdit?.kelompok || '')}"></label>
-    <fieldset class="field"><legend>Jenis</legend><div class="seg">
+    <fieldset class="field" data-pane="link"${isFile ? ' hidden' : ''}><legend>Jenis</legend><div class="seg">
       ${Object.entries(JENIS).map(([k, v]) => `<label><input type="radio" name="jenis" value="${k}"${k === jenis ? ' checked' : ''}><span>${v}</span></label>`).join('')}
     </div></fieldset>
     <div class="row-end">
@@ -1585,6 +1615,9 @@ function failed(err) {
     if (store?.mode === 'supabase') openLogin();
   } else if (/does not exist|schema cache/i.test(m)) hint = 'Tabel belum dibuat. Jalankan schema.sql di Supabase.';
   else if (/permission denied/i.test(m)) hint = 'Izin tabel belum diberikan. Jalankan ulang schema.sql.';
+  else if (/bucket not found/i.test(m)) hint = 'Penyimpanan file belum dibuat. Jalankan schema.sql terbaru di Supabase.';
+  else if (/maximum allowed size|payload too large/i.test(m)) hint = 'File terlalu besar. Maksimal 25 MB.';
+  else if (/already exists|duplicate/i.test(m)) hint = 'Coba unggah lagi.';
   else if (/foreign key/i.test(m)) hint = 'Data ini masih dipakai simpul lain. Muat ulang halaman lalu coba lagi.';
   toast(`Belum tersimpan: ${m}. ${hint}`, 'error');
 }
@@ -1704,7 +1737,7 @@ function focusSrcForm() {
   const f = panelEl.querySelector('#srcform');
   if (!f) return;
   f.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
-  if (canHover) f.url.focus();
+  if (canHover) (f.url || f.judul).focus();
 }
 
 /* ───────────── Jadikan subkategori ─────────────
@@ -1748,8 +1781,30 @@ $('#form-conv').addEventListener('submit', async e => {
 });
 function wireSrcForm(f) {
   let titleTouched = !!f.judul.value.trim(), jenisTouched = !!srcEdit?.id, seq = 0, timer;
+  const fileMode = () => f.querySelector('input[name="mode"]:checked')?.value === 'berkas';
+  const fileErr = f.querySelector('[data-err="berkas"]');
+  const showFileErr = msg => { fileErr.textContent = msg; fileErr.hidden = false; };
   f.judul.addEventListener('input', () => { titleTouched = !!f.judul.value.trim(); });
-  f.addEventListener('change', e => { if (e.target.name === 'jenis') jenisTouched = true; });
+  f.addEventListener('change', e => {
+    if (e.target.name === 'jenis') jenisTouched = true;
+    if (e.target.name === 'mode') {
+      f.querySelectorAll('[data-pane]').forEach(el => { el.hidden = el.dataset.pane !== e.target.value; });
+      (fileMode() ? f.berkas : f.url)?.focus();
+    }
+    if (e.target.name === 'berkas') {
+      const file = f.berkas.files[0];
+      fileErr.hidden = true;
+      f.querySelector('.drop-t').textContent = file ? `${file.name} · ${fmtSize(file.size)}` : 'Pilih file atau seret ke sini';
+      if (file && !titleTouched) f.judul.value = titleFromFile(file.name);
+    }
+  });
+  const drop = f.querySelector('.drop');
+  if (drop) {
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', () => drop.classList.remove('over'));
+  }
+  if (!f.url) return wireSubmit(f, fileMode, showFileErr);
   f.url.addEventListener('input', () => {
     const url = f.url.value.trim();
     f.querySelector('[data-err="url"]').hidden = true;
@@ -1765,21 +1820,47 @@ function wireSrcForm(f) {
       if (t && !titleTouched) f.judul.value = t;
     }, 450);
   });
+  wireSubmit(f, fileMode, showFileErr);
+}
+
+/** Kirim form sumber: link baru/lama, file lama (judul/kelompok/materi saja), atau unggah file baru. */
+function wireSubmit(f, fileMode, showFileErr) {
   f.addEventListener('submit', async e => {
     e.preventDefault();
-    const url = f.url.value.trim();
-    if (!safeUrl(url)) { f.querySelector('[data-err="url"]').hidden = false; f.url.focus(); return; }
     const old = srcEdit.id ? src.find(s => s.id === srcEdit.id) : null;
-    const row = {
-      id: old?.id || uuid(), materi_id: (f.materi && f.materi.value) || srcEdit.materiId, url,
+    const base = {
+      materi_id: (f.materi && f.materi.value) || srcEdit.materiId,
       judul: f.judul.value.trim() || null,
       kelompok: canonGroup(f.kelompok.value, srcEdit.materiId),
-      jenis: f.querySelector('input[name="jenis"]:checked')?.value || detectJenis(url) || 'web',
     };
+    let row, file = null, path = null;
+    if (old?.berkas_path) {
+      row = { ...old, ...base };
+    } else if (!old && fileMode()) {
+      file = f.berkas.files[0];
+      if (!file) return showFileErr('Pilih file dulu.');
+      const bad = checkFile(file);
+      if (bad) return showFileErr(bad);
+      const id = uuid();
+      path = objectPath(currentUserId(), id, file.name);
+      row = { id, ...base, judul: base.judul || titleFromFile(file.name), url: null, jenis: fileJenis(file.name, file.type),
+        berkas_path: path, berkas_nama: file.name, berkas_tipe: file.type || 'application/octet-stream', berkas_ukuran: file.size };
+    } else {
+      const url = f.url.value.trim();
+      if (!safeUrl(url)) { f.querySelector('[data-err="url"]').hidden = false; f.url.focus(); return; }
+      row = { id: old?.id || uuid(), ...base, url,
+        jenis: f.querySelector('input[name="jenis"]:checked')?.value || detectJenis(url) || 'web' };
+    }
     const btn = f.querySelector('button[type="submit"]');
     btn.disabled = true;
     try {
-      const saved = await saveSrc(row);
+      if (file) {
+        btn.textContent = 'Mengunggah…';
+        await store.files.upload(path, file, row.berkas_tipe);
+      }
+      let saved;
+      try { saved = await saveSrc(row); }
+      catch (err) { if (file) await removeObjects([path]); throw err; }
       srcEdit = null;
       if (old && saved.materi_id !== old.materi_id) {
         refresh(0.05);
@@ -1788,8 +1869,8 @@ function wireSrcForm(f) {
       }
       srcFocus = saved.id;
       refresh(0.05);
-      toast(old ? 'Sumber diperbarui' : 'Sumber ditambahkan');
-    } catch (err) { failed(err); btn.disabled = false; }
+      toast(old ? 'Sumber diperbarui' : file ? 'File diunggah' : 'Sumber ditambahkan');
+    } catch (err) { failed(err); btn.disabled = false; btn.textContent = old ? 'Simpan' : 'Tambah'; }
   });
 }
 

@@ -35,6 +35,7 @@ def _open(browser, query, viewport=None):
 
     ctx.route('**/*', route)
     page = ctx.new_page()
+    page.set_default_timeout(8000)
     page.errors = []
     page.on('pageerror', lambda e: page.errors.append(str(e)))
     page.add_init_script('try { localStorage.clear() } catch (e) {}')
