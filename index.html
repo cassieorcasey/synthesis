@@ -1797,7 +1797,12 @@ panelEl.addEventListener('click', async e => {
       reading.add(s.id);
       const fresh = !readerCache.has(s.id) || readerCache.get(s.id) === 'error';
       renderPanel();
-      if (fresh) { await loadNote(s); if (reading.has(s.id)) renderPanel(); }
+      if (fresh) {
+        await loadNote(s);
+        // ganti kartu itu saja: panel lain atau form yang sedang diisi tidak ikut di-render ulang
+        const el = panelEl.querySelector(`article.src[data-src-id="${s.id}"]`);
+        if (el && reading.has(s.id)) el.outerHTML = fileCard(s);
+      }
       return;
     }
     if (act === 'src-add') { srcEdit = { materiId: n.id, id: null, kelompok: b.dataset.kelompok || '' }; renderPanel(); return focusSrcForm(b.dataset.kelompok ? 'url' : null); }

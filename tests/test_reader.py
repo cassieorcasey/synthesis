@@ -45,6 +45,7 @@ def test_pdf_opens_new_tab(app):
     open_materi(app, 'Determinan')
     with app.context.expect_page() as info:
         app.click(f'{card(app, sid)} [data-act="open-file"]')
+    info.value.wait_for_url('blob:**')
     assert info.value.url.startswith('blob:')
 
 
@@ -83,3 +84,28 @@ def test_note_cannot_trigger_app_actions(app):
     app.wait_for_timeout(300)
     assert app.locator('#panel h2:has-text("Determinan")').count() == 1
     assert app.locator(card(app, victim)).count() == 1
+
+
+def test_slow_note_does_not_wipe_open_form(app):
+    sid = seed(app, 'Determinan', 'lambat.md', '# lambat')
+    open_materi(app, 'Determinan')
+    app.evaluate("""(() => { const f = window.fetch; window.fetch = (...a) =>
+        new Promise(r => setTimeout(r, 900)).then(() => f(...a)); })()""")
+    app.click(f'{card(app, sid)} [data-act="read"]')
+    app.click('#panel [data-act="src-add"] >> nth=0')
+    app.fill('#srcform input[name="url"]', 'https://example.com/catatan')
+    app.wait_for_timeout(1500)
+    assert app.input_value('#srcform input[name="url"]') == 'https://example.com/catatan'
+
+
+def test_slow_note_after_switching_materi_keeps_other_panel(app):
+    sid = seed(app, 'Determinan', 'lambat2.md', '# lambat')
+    open_materi(app, 'Determinan')
+    app.evaluate("""(() => { const f = window.fetch; window.fetch = (...a) =>
+        new Promise(r => setTimeout(r, 900)).then(() => f(...a)); })()""")
+    app.click(f'{card(app, sid)} [data-act="read"]')
+    open_materi(app, 'Vektor')
+    app.click('#panel [data-act="src-add"] >> nth=0')
+    app.fill('#srcform input[name="url"]', 'https://example.com/v')
+    app.wait_for_timeout(1500)
+    assert app.input_value('#srcform input[name="url"]') == 'https://example.com/v'
