@@ -655,6 +655,8 @@ const CONFIG = {
   SUPABASE_ANON_KEY: 'sb_publishable_jyOphMfcx8BlRhiER8ZRxg_n52XQZgV',
 };
 const DEMO = new URLSearchParams(location.search).has('demo');
+// ?demo&testfiles: mode contoh dengan penyimpanan file tiruan di memori, untuk pengujian otomatis
+const TESTFILES = DEMO && new URLSearchParams(location.search).has('testfiles');
 const T_KAT = 'peta_kategori', T_MAT = 'peta_materi', T_SRC = 'peta_sumber';
 const COLORS = ['indigo', 'teal', 'orange', 'pink', 'blue', 'green', 'purple', 'yellow'];
 const BRANCH = ['indigo', 'blue', 'purple', 'teal', 'orange', 'pink', 'green', 'yellow'];
@@ -772,6 +774,41 @@ function detectJenis(url) {
   if (/\.pdf($|[?#])/i.test(url) || /^drive\.google\.com$|^docs\.google\.com$/.test(h) && /\/file\//.test(url)) return 'pdf';
   return 'web';
 }
+/* ───────────── File milik sendiri ───────────── */
+const MAX_FILE = 25 * 1024 * 1024;
+const FILE_BUCKET = 'peta-berkas';
+const extOf = name => { const m = /\.([A-Za-z0-9]{1,10})$/.exec(name || ''); return m ? m[1].toLowerCase() : ''; };
+/** Nama file aman untuk jalur Storage: tanpa aksen, hanya huruf/angka/._-, maksimal 80 karakter, ekstensi dipertahankan. */
+function safeFileName(name) {
+  const clean = s => s.normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9._-]+/g, '-').replace(/-{2,}/g, '-').replace(/^[-.]+|[-.]+$/g, '');
+  const ext = extOf(name), base = clean(ext ? name.slice(0, -(ext.length + 1)) : name || '');
+  const tail = ext ? '.' + ext : '';
+  const cut = base.slice(0, 80 - tail.length).replace(/[-.]+$/, '');
+  return (cut || 'berkas') + tail;
+}
+/** Jenis sumber dari nama dan tipe file: pdf, catatan (md/txt), atau berkas. */
+function fileJenis(name, mime) {
+  const e = extOf(name);
+  if (e === 'pdf' || mime === 'application/pdf') return 'pdf';
+  if (['md', 'markdown', 'txt'].includes(e) || /^text\/(markdown|plain|x-markdown)$/.test(mime || '')) return 'catatan';
+  return 'berkas';
+}
+const numFmt = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
+function fmtSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${numFmt.format(bytes / 1024)} KB`;
+  return `${numFmt.format(bytes / 1048576)} MB`;
+}
+function checkFile(f) {
+  if (!f.size) return 'File ini kosong.';
+  if (f.size > MAX_FILE) return 'Ukuran file maksimal 25 MB.';
+  return null;
+}
+const titleFromFile = name => (extOf(name) ? name.slice(0, -(extOf(name).length + 1)) : name).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+const objectPath = (userId, srcId, name) => `${userId}/${srcId}/${safeFileName(name)}`;
+if (TESTFILES) window.__t = { MAX_FILE, safeFileName, fileJenis, fmtSize, checkFile, titleFromFile, objectPath };
+
 /** Judul halaman lewat noembed (mendukung CORS). Gagal diam-diam: judul tetap bisa diketik manual. */
 async function fetchTitle(url) {
   try {
