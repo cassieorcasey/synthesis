@@ -21,19 +21,19 @@ def browser():
         b.close()
 
 
+def _route(r):
+    u = r.request.url
+    for name, path in LOCAL.items():
+        if u.split('?')[0].endswith(name):
+            return r.fulfill(path=str(path), content_type='application/javascript')
+    if u.startswith('file://') or u.startswith('blob:') or u.startswith('data:'):
+        return r.continue_()
+    return r.abort()
+
+
 def _open(browser, query, viewport=None):
     ctx = browser.new_context(viewport=viewport or {'width': 1280, 'height': 860})
-
-    def route(r):
-        u = r.request.url
-        for name, path in LOCAL.items():
-            if u.split('?')[0].endswith(name):
-                return r.fulfill(path=str(path), content_type='application/javascript')
-        if u.startswith('file://') or u.startswith('blob:') or u.startswith('data:'):
-            return r.continue_()
-        return r.abort()
-
-    ctx.route('**/*', route)
+    ctx.route('**/*', _route)
     page = ctx.new_page()
     page.set_default_timeout(8000)
     page.errors = []

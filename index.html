@@ -531,6 +531,7 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
   <button type="button" id="zoom-in" aria-label="Perbesar"><svg viewBox="0 0 18 18"><path d="M9 4v10M4 9h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button>
   <button type="button" id="zoom-out" aria-label="Perkecil"><svg viewBox="0 0 18 18"><path d="M4 9h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button>
   <button type="button" id="zoom-fit" aria-label="Tampilkan semua"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M15 7V3h-4M3 11v4h4M15 11v4h-4"></path></svg></button>
+  <button type="button" id="tidy" aria-label="Rapikan peta" title="Rapikan peta"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="4" height="4" rx="1"></rect><rect x="12" y="2.5" width="4" height="3.5" rx="1"></rect><rect x="12" y="12" width="4" height="3.5" rx="1"></rect><path d="M6 9h2.5c1 0 1.5-.5 1.5-1.5v-1c0-1 .5-1.5 1.5-1.5H12M10 9.5v2c0 1 .5 1.5 1.5 1.5H12"></path></svg></button>
   <button type="button" id="collapse-all" aria-label="Lipat semua cabang" title="Lipat semua cabang"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"></circle><path d="M9 2v2.5M9 13.5V16M2 9h2.5M13.5 9H16"></path></svg></button>
 </div>
 
@@ -1078,55 +1079,35 @@ function reveal(id) {
   return changed;
 }
 
-/* ───────────── Graf (D3-force) ───────────── */
+/* ───────────── Graf (tata letak pohon) ───────────── */
 const svgEl = $('#map'), stageEl = $('#stage');
 const svg = d3.select(svgEl), vp = d3.select('#vp');
 const gL = d3.select('#links'), gN = d3.select('#nodes');
 let simNodes = [], simLinks = [], pos = new Map(), K = 1, T = d3.zoomIdentity, zoomLevel = 'mid';
 
-/** Tabrakan kotak-ke-kotak: kartu tidak saling menimpa, didorong lewat sumbu dengan tumpang tindih terkecil. */
-function forceRect(pad = 12) {
-  let nodes = [];
-  function force(alpha) {
-    const s = Math.min(1, 0.5 + alpha);
-    for (let i = 0; i < nodes.length; i++) {
-      const a = nodes[i];
-      for (let j = i + 1; j < nodes.length; j++) {
-        const b = nodes[j];
-        const dx = (b.x + b.vx) - (a.x + a.vx) || 0.01, dy = (b.y + b.vy) - (a.y + a.vy) || 0.01;
-        const ox = (a.w + b.w) / 2 + pad - Math.abs(dx), oy = (a.h + b.h) / 2 + pad - Math.abs(dy);
-        if (ox <= 0 || oy <= 0) continue;
-        const wa = a.fx != null ? 0 : b.fx != null ? 1 : 0.5, wb = 1 - wa;
-        if (ox / (a.w + b.w) < oy / (a.h + b.h)) {
-          const m = ox * s * Math.sign(dx);
-          a.vx -= m * wa; b.vx += m * wb;
-        } else {
-          const m = oy * s * Math.sign(dy);
-          a.vy -= m * wa; b.vy += m * wb;
-        }
-      }
-    }
+/** Gerak halus ke target pohon (tx, ty). Tanpa animasi bila prefers-reduced-motion. */
+let tween = null;
+const moving = () => tween !== null;
+function stopTween() { if (tween) { tween.stop(); tween = null; } }
+function settle(animate = true) {
+  stopTween();
+  const ns = simNodes;
+  for (const n of ns) { n.sx = n.x; n.sy = n.y; }
+  if (!animate || reduceMotion || !ns.some(n => n.x !== n.tx || n.y !== n.ty)) {
+    for (const n of ns) { n.x = n.tx; n.y = n.ty; }
+    ticked();
+    return;
   }
-  force.initialize = n => { nodes = n; };
-  return force;
+  const t = d3.timer(elapsed => {
+    const e = d3.easeCubicOut(Math.min(1, elapsed / 380));
+    for (const n of ns) { n.x = n.sx + (n.tx - n.sx) * e; n.y = n.sy + (n.ty - n.sy) * e; }
+    ticked();
+    if (elapsed >= 380) stopTween();
+  });
+  tween = t;
 }
-
-const sim = d3.forceSimulation()
-  .velocityDecay(0.35)
-  .alphaDecay(0.03)
-  .force('link', d3.forceLink().id(d => d.id)
-    .distance(l => (l.type === 'kk' ? 46 : 22) + (l.source.w + l.target.w) / 4 + (l.source.h + l.target.h) / 4)
-    .strength(l => (l.type === 'kk' ? 0.5 : 0.7)))
-  .force('charge', d3.forceManyBody().strength(d => (d.kind === 'mat' ? -120 : d.depth === 0 ? -620 : -320)).distanceMax(700))
-  .force('rect', forceRect(12))
-  .force('x', d3.forceX(0).strength(0.03))
-  .force('y', d3.forceY(0).strength(0.03))
-  .on('tick', ticked)
-  .stop();
-function viewCenter() {
-  const [x, y] = T.invert([svgEl.clientWidth / 2, svgEl.clientHeight / 2]);
-  return { x, y };
-}
+/** Kembalikan semua kartu ke tata letak pohon (membatalkan hasil seret). */
+function tidy() { settle(true); }
 const idOf = v => (typeof v === 'object' ? v.id : v);
 
 /** Tata letak pohon kiri-ke-kanan. Murni: hanya bergantung pada struktur (D), ukuran kartu, dan simpul yang terlihat.
@@ -1176,38 +1157,29 @@ function treeLayout(ids, { gapX = 56, gapY = 14, rootGap = 40 } = {}) {
 }
 
 function rebuild() {
-  const vis = visibleIds();
-  const c0 = viewCenter();
-  // akar baru disebar melingkar; anak baru muncul di dekat induknya (induk diproses lebih dulu)
-  const freshRoots = D.roots.filter(r => !pos.has(r));
-  freshRoots.forEach((r, i) => {
-    const a = (i / Math.max(freshRoots.length, 1)) * Math.PI * 2 - Math.PI / 2;
-    const R = freshRoots.length > 1 ? 140 + freshRoots.length * 40 : 0;
-    pos.set(r, { x: c0.x + Math.cos(a) * R, y: c0.y + Math.sin(a) * R });
-  });
+  stopTween();
+  const vis = visibleIds(), visSet = new Set(vis);
+  const L = treeLayout(vis);
+  // kartu yang tidak terlihat dilupakan; yang baru lahir di posisi induknya lalu bergerak ke targetnya
+  for (const id of [...pos.keys()]) if (!visSet.has(id) || !byId.has(id)) pos.delete(id);
   for (const id of vis) {
     if (pos.has(id)) continue;
-    const p = pos.get(parentOf(id)) || c0;
-    const a = Math.random() * Math.PI * 2;
-    pos.set(id, { x: p.x + Math.cos(a) * 40, y: p.y + Math.sin(a) * 40, vx: 0, vy: 0 });
+    const t = L.get(id), p = pos.get(parentOf(id));
+    pos.set(id, { x: p ? p.x : t.x, y: p ? p.y : t.y });
   }
-  for (const id of [...pos.keys()]) if (!byId.has(id)) pos.delete(id);
-
-  const visSet = new Set(vis);
-  simNodes = vis.map(id => Object.assign(pos.get(id), { id, kind: byId.get(id).kind, depth: D.depth.get(id) || 0 }, boxOf(id)));
+  simNodes = vis.map(id => Object.assign(pos.get(id), { id, kind: byId.get(id).kind, depth: D.depth.get(id) || 0, tx: L.get(id).x, ty: L.get(id).y }, boxOf(id)));
+  const nodeOf = new Map(simNodes.map(n => [n.id, n]));
   simLinks = vis.filter(id => parentOf(id) && visSet.has(parentOf(id))).map(id => ({
-    id: 'l-' + id, type: byId.get(id).kind === 'kat' ? 'kk' : 'km', source: parentOf(id), target: id,
+    id: 'l-' + id, type: byId.get(id).kind === 'kat' ? 'kk' : 'km', source: nodeOf.get(parentOf(id)), target: nodeOf.get(id),
   }));
   draw();
-  sim.nodes(simNodes);
-  sim.force('link').links(simLinks);
 }
 
 const drag = d3.drag()
   .filter(e => !e.button && !(e.type || '').startsWith('touch'))
-  .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.2).restart(); d.fx = d.x; d.fy = d.y; svgEl.classList.add('dragging'); })
-  .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
-  .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; svgEl.classList.remove('dragging'); });
+  .on('start', () => { stopTween(); svgEl.classList.add('dragging'); })
+  .on('drag', (e, d) => { d.x = e.x; d.y = e.y; ticked(); })   // geser sementara; Rapikan atau buka/tutup cabang mengembalikannya
+  .on('end', () => { svgEl.classList.remove('dragging'); });
 
 function draw() {
   const ls = gL.selectAll('path').data(simLinks, d => d.id);
@@ -1277,15 +1249,11 @@ function paintNode(el, d) {
   }
 }
 
-/** Kurva Bézier halus antar pusat node, melengkung mengikuti sumbu dominan. */
+/** Kurva Bézier dari tepi kanan induk ke tepi kiri anak. */
 function curve(l) {
-  const sx = l.source.x, sy = l.source.y, tx = l.target.x, ty = l.target.y;
-  if (Math.abs(tx - sx) > Math.abs(ty - sy)) {
-    const mx = (sx + tx) / 2;
-    return `M${sx},${sy}C${mx},${sy} ${mx},${ty} ${tx},${ty}`;
-  }
-  const my = (sy + ty) / 2;
-  return `M${sx},${sy}C${sx},${my} ${tx},${my} ${tx},${ty}`;
+  const sx = l.source.x + l.source.w / 2, sy = l.source.y, tx = l.target.x - l.target.w / 2, ty = l.target.y;
+  const mx = (sx + tx) / 2;
+  return `M${sx},${sy}C${mx},${sy} ${mx},${ty} ${tx},${ty}`;
 }
 
 function ticked() {
@@ -1340,8 +1308,9 @@ function focusNode(id) {
   const d = pos.get(id);
   if (!d) return;
   const R = freeRect();
+  const px = d.tx ?? d.x, py = d.ty ?? d.y;
   const k = Math.max(K, byId.get(id).kind === 'mat' ? 1.5 : 1.0);
-  moveTo(d3.zoomIdentity.translate((R.x0 + R.x1) / 2 - k * d.x, (R.y0 + R.y1) / 2 - k * d.y).scale(k), 560);
+  moveTo(d3.zoomIdentity.translate((R.x0 + R.x1) / 2 - k * px, (R.y0 + R.y1) / 2 - k * py).scale(k), 560);
 }
 
 /** Sorot simpul fokus, leluhurnya, dan anak langsungnya; yang lain diredupkan. */
@@ -1759,6 +1728,7 @@ function failed(err) {
   toast(`Belum tersimpan: ${m}. ${hint}`, 'error');
 }
 
+/** `heat` dipertahankan agar semua pemanggil tetap sama; tata letak pohon tidak memakainya. */
 function refresh(heat = 0.3) {
   D = derive();
   if (selectedId && !byId.has(selectedId)) selectedId = null;
@@ -1767,8 +1737,7 @@ function refresh(heat = 0.3) {
   renderPanel();
   applyHighlight();
   $('#empty').hidden = kat.length > 0 || !loaded;
-  if (!reduceMotion) sim.alpha(Math.max(sim.alpha(), heat)).restart();
-  else { for (let i = 0; i < 120; i++) sim.tick(); ticked(); }
+  settle(true);
 }
 
 function upsertLocal(list, row) {
@@ -2248,6 +2217,7 @@ $('#empty-kat').addEventListener('click', addKat);
 $('#zoom-in').addEventListener('click', () => (reduceMotion ? svg : svg.transition().duration(250)).call(zoom.scaleBy, 1.4));
 $('#zoom-out').addEventListener('click', () => (reduceMotion ? svg : svg.transition().duration(250)).call(zoom.scaleBy, 1 / 1.4));
 $('#zoom-fit').addEventListener('click', () => fit(true));
+$('#tidy').addEventListener('click', tidy);
 $('#collapse-all').addEventListener('click', () => {
   expanded.clear(); saveOpen(); select(null, { focus: false }); refresh(0.5);
   setTimeout(() => fit(true), reduceMotion ? 0 : 420);
@@ -2269,16 +2239,13 @@ function layoutFresh() {
   D = derive();
   T = d3.zoomIdentity;
   rebuild();
-  sim.alpha(1);
-  for (let i = 0; i < 320; i++) sim.tick();
-  ticked();
+  settle(false);
   renderSide();
   renderPanel();
   renderStatus();
   applyHighlight();
   $('#empty').hidden = kat.length > 0 || !loaded;
   fit(false);
-  if (!reduceMotion) sim.alpha(0.08).restart();
 }
 async function loadAll() {
   if (loading) return;
@@ -2317,10 +2284,11 @@ async function boot() {
       treeLayout,
       openAll() { expanded = new Set(kat.map(k => k.id)); refresh(0.05); },
       order(id) { return byId.get(id)?.kind === 'kat' ? [...D.kids.get(id), ...D.mats.get(id)] : []; },
-      nodes() {
-        const L = treeLayout(visibleIds());
-        return [...L].map(([id, p]) => { const b = boxOf(id); return { id, x: p.x, y: p.y, w: b.w, h: b.h, parent: parentOf(id) }; });
-      },
+      moving,
+      refreshNow() { refresh(0.05); },
+      clearAll() { kat = []; mat = []; src = []; pos.clear(); selectedId = null; layoutFresh(); },
+      target() { return Object.fromEntries(treeLayout(visibleIds())); },
+      nodes() { return simNodes.map(n => ({ id: n.id, x: n.x, y: n.y, w: n.w, h: n.h, parent: parentOf(n.id) })); },
     });
     if (TESTFILES) Object.assign(window.__t, {
       files: memFiles,

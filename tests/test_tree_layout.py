@@ -5,12 +5,17 @@ OPEN_ALL = 'window.__t.openAll()'
 NODES = 'window.__t.nodes()'
 
 
+def open_all(page):
+    page.evaluate(OPEN_ALL)
+    page.wait_for_function('!window.__t.moving()')
+
+
 def overlaps(a, b):
     return (abs(a['x'] - b['x']) < (a['w'] + b['w']) / 2 and abs(a['y'] - b['y']) < (a['h'] + b['h']) / 2)
 
 
 def test_tidak_ada_irisan(app):
-    app.evaluate(OPEN_ALL)
+    open_all(app)
     ns = app.evaluate(NODES)
     assert len(ns) > 10
     bad = [(a['id'], b['id']) for i, a in enumerate(ns) for b in ns[i + 1:] if overlaps(a, b)]
@@ -18,7 +23,7 @@ def test_tidak_ada_irisan(app):
 
 
 def test_anak_di_kanan_induk(app):
-    app.evaluate(OPEN_ALL)
+    open_all(app)
     ns = {n['id']: n for n in app.evaluate(NODES)}
     anak = [n for n in ns.values() if n['parent']]
     assert anak
@@ -28,7 +33,7 @@ def test_anak_di_kanan_induk(app):
 
 
 def test_urutan_anak_sesuai_data(app):
-    app.evaluate(OPEN_ALL)
+    open_all(app)
     ns = {n['id']: n for n in app.evaluate(NODES)}
     cek = 0
     for pid in [i for i, n in ns.items() if n['parent'] is None or True]:
@@ -42,7 +47,7 @@ def test_urutan_anak_sesuai_data(app):
 
 
 def test_induk_di_tengah_anak(app):
-    app.evaluate(OPEN_ALL)
+    open_all(app)
     ns = {n['id']: n for n in app.evaluate(NODES)}
     cek = 0
     for pid, p in ns.items():
@@ -56,7 +61,7 @@ def test_induk_di_tengah_anak(app):
 
 
 def test_akar_ditumpuk_di_kolom_pertama(app):
-    app.evaluate(OPEN_ALL)
+    open_all(app)
     ns = app.evaluate(NODES)
     akar = sorted([n for n in ns if n['parent'] is None], key=lambda n: n['y'])
     assert len(akar) >= 1
@@ -68,7 +73,7 @@ def test_deterministik(browser):
     for _ in range(2):
         ctx, page = _open(browser, 'demo&testfiles')
         page.wait_for_function('!!window.__t && !!window.__t.nodes')
-        page.evaluate(OPEN_ALL)
+        open_all(page)
         # id contoh dibuat acak tiap muat; yang harus sama adalah geometrinya
         hasil.append(sorted((n['x'], n['y'], n['w'], n['h']) for n in page.evaluate(NODES)))
         ctx.close()
