@@ -338,6 +338,24 @@ button { cursor: pointer; }
 .src .ico svg { width: 18px; height: 18px; }
 .src .ico.pdf { background: color-mix(in srgb, #E5484D 16%, transparent); color: #E5484D; }
 .src .ico.yt { background: color-mix(in srgb, var(--yt) 14%, transparent); color: var(--yt); }
+.src .ico.file { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.src .acts .btn.small { height: 32px; padding: 0 12px; }
+.reader { border-top: 1px solid var(--hair); padding: 14px 16px 16px; max-height: min(60vh, 560px); overflow: auto; }
+.reader.md { font-size: 14.5px; line-height: 1.6; color: var(--fg); overflow-wrap: anywhere; }
+.reader.md > :first-child { margin-top: 0; }
+.reader.md > :last-child { margin-bottom: 0; }
+.reader.md h1, .reader.md h2, .reader.md h3 { line-height: 1.25; margin: 1.1em 0 .45em; }
+.reader.md h1 { font-size: 1.35em; } .reader.md h2 { font-size: 1.18em; } .reader.md h3 { font-size: 1.05em; }
+.reader.md p, .reader.md ul, .reader.md ol, .reader.md blockquote, .reader.md pre, .reader.md table { margin: 0 0 .8em; }
+.reader.md ul, .reader.md ol { padding-left: 1.3em; }
+.reader.md a { color: var(--accent); }
+.reader.md code { font: .9em ui-monospace, "SF Mono", Menlo, monospace; background: var(--fill); padding: .1em .35em; border-radius: 5px; }
+.reader.md pre { background: var(--fill); padding: 10px 12px; border-radius: 10px; overflow: auto; white-space: pre-wrap; }
+.reader.md pre code { background: none; padding: 0; }
+.reader.md blockquote { border-left: 3px solid var(--hair); padding-left: 12px; color: var(--fg-2); }
+.reader.md img { max-width: 100%; height: auto; border-radius: 8px; }
+.reader.md table { border-collapse: collapse; display: block; overflow-x: auto; }
+.reader.md th, .reader.md td { border: 1px solid var(--hair); padding: 5px 8px; text-align: left; }
 .src .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: inherit; }
 .src .t { font-weight: 600; font-size: 14.5px; line-height: 1.3; overflow-wrap: anywhere; }
 .src .d { font-size: 12.5px; color: var(--fg-3); overflow-wrap: anywhere; }
@@ -970,6 +988,8 @@ let byId = new Map(), D = null;
 let expanded = new Set(lsGet(LS_OPEN) || []);
 let selectedId = null, hoverId = null;
 let srcEdit = null;           // { materiId, id|null } saat form sumber terbuka di panel
+const reading = new Set();    // id sumber catatan yang sedang dibuka di panel
+const readerCache = new Map(); // id sumber → HTML hasil render (sudah disanitasi), 'loading', atau 'error'
 const playing = new Set();    // id sumber YouTube yang sedang diputar di panel
 let srcFocus = null;          // id sumber yang perlu digulir ke tampilan setelah panel dirender
 
@@ -1332,6 +1352,8 @@ const kindIcon = {
   web: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"></circle><path d="M2 8h12M8 2c2 2.2 2 9.8 0 12M8 2c-2 2.2-2 9.8 0 12"></path></svg>',
   pdf: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 1.8h5.5L12.5 5v9.2H4z"></path><path d="M9.5 1.8V5h3"></path></svg>',
   lainnya: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6.5 9.5l3-3M5.2 7.6L3.9 8.9a2.5 2.5 0 003.5 3.5l1.3-1.3M10.8 8.4l1.3-1.3a2.5 2.5 0 00-3.5-3.5L7.3 4.9"></path></svg>',
+  catatan: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M4 1.8h5.5L12.5 5v9.2H4z"></path><path d="M6 8h4.5M6 10.5h4.5M6 5.5h2"></path></svg>',
+  berkas: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M4 1.8h5.5L12.5 5v9.2H4z"></path><path d="M8.2 7v4.6M6.3 9.8l1.9 1.9 1.9-1.9"></path></svg>',
 };
 function highlight(text, q) {
   const i = text.toLowerCase().indexOf(q);
@@ -1341,11 +1363,12 @@ function highlight(text, q) {
 function searchResults(q) {
   const out = [];
   const score = (t) => { const s = t.toLowerCase(); return s.startsWith(q) ? 0 : s.includes(' ' + q) ? 1 : s.includes(q) ? 2 : -1; };
+  const best = (...v) => { const ok = v.filter(x => x >= 0); return ok.length ? Math.min(...ok) : -1; };
   for (const k of kat) { const s = score(k.nama); if (s >= 0) out.push({ s, id: k.id, icon: 'kat', title: k.nama, sub: ancestors(k.id).map(nameOf).join(' › ') || 'Kategori utama' }); }
   for (const m of mat) { const s = score(m.judul); if (s >= 0) out.push({ s: s + 0.1, id: m.id, icon: 'mat', title: m.judul, sub: pathOf(m.kategori_id) }); }
   for (const x of src) {
-    const t = x.judul || hostOf(x.url);
-    const s = score(t);
+    const t = x.judul || x.berkas_nama || hostOf(x.url);
+    const s = best(score(t), x.berkas_nama ? score(x.berkas_nama) : -1);
     if (s >= 0 && byId.has(x.materi_id)) out.push({ s: s + 0.2, id: x.materi_id, srcId: x.id, icon: x.jenis, title: t, sub: `${x.kelompok || 'Sumber'} · ${nameOf(x.materi_id)}` });
   }
   return out.sort((a, b) => a.s - b.s || coll.compare(a.title, b.title)).slice(0, 14);
@@ -1442,7 +1465,64 @@ function crumbs(id, label) {
   return `<nav class="crumbs" aria-label="Lokasi" style="${ccStyle(D.color.get(id))}"><span class="dot"></span>${parts.length ? parts.join('<span class="sep">›</span>') : esc(label)}</nav>`;
 }
 
+/** Kartu sumber berupa file: Baca (catatan), Buka (PDF), atau Unduh (lainnya). */
+function fileCard(s) {
+  const title = s.judul || s.berkas_nama || 'Berkas';
+  const kind = s.jenis === 'pdf' ? 'pdf' : s.jenis === 'catatan' ? 'catatan' : 'berkas';
+  const open = reading.has(s.id);
+  const [act, label] = kind === 'catatan' ? ['read', open ? 'Tutup' : 'Baca'] : kind === 'pdf' ? ['open-file', 'Buka'] : ['download-file', 'Unduh'];
+  const html = readerCache.get(s.id);
+  const body = !open ? '' : html === 'error'
+    ? '<div class="reader"><p class="err">Catatan gagal dimuat. Coba lagi.</p></div>'
+    : !html || html === 'loading' ? '<div class="reader"><p class="help">Memuat catatan…</p></div>'
+    : `<div class="reader md">${html}</div>`;
+  return `<article class="src" data-src-id="${s.id}" data-kind="berkas"><div class="meta">
+    <span class="ico ${kind === 'pdf' ? 'pdf' : 'file'}">${kindIcon[kind]}</span>
+    <span class="txt"><span class="t">${esc(title)}</span><span class="d">${esc(s.berkas_nama || '')} · ${fmtSize(s.berkas_ukuran || 0)}</span></span>
+    <div class="acts"><button type="button" class="btn small" data-act="${act}" data-id="${s.id}"${kind === 'catatan' ? ` aria-expanded="${open}"` : ''}>${label}</button>
+      <button type="button" class="icon-btn" data-act="src-edit" data-id="${s.id}" aria-label="Ubah sumber ${esc(title)}">${pencil}</button></div>
+  </div>${body}</article>`;
+}
+
+const MD_LIBS = ['https://cdn.jsdelivr.net/npm/marked@18.0.10/lib/marked.umd.js', 'https://cdn.jsdelivr.net/npm/dompurify@3.4.14/dist/purify.min.js'];
+let mdReady = null;
+/** Ambil file catatan lewat tautan bertanda tangan, render Markdown, lalu sanitasi. HTML mentah tidak pernah masuk DOM. */
+async function loadNote(s) {
+  readerCache.set(s.id, 'loading');
+  try {
+    const [text] = await Promise.all([
+      store.files.signedUrl(s.berkas_path).then(u => fetch(u)).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }),
+      mdReady ||= Promise.all(MD_LIBS.map(loadScript)).catch(e => { mdReady = null; throw e; }),
+    ]);
+    const raw = extOf(s.berkas_nama) === 'txt' ? `<pre>${esc(text)}</pre>` : window.marked.parse(text);
+    const clean = window.DOMPurify.sanitize(raw, { USE_PROFILE: { html: true } });
+    const box = document.createElement('div');
+    box.innerHTML = clean;
+    box.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+    readerCache.set(s.id, box.innerHTML);
+  } catch (err) {
+    console.error(err);
+    readerCache.set(s.id, 'error');
+  }
+}
+/** Buka PDF di tab baru. Jendela dibuka dulu (sinkron) supaya tidak diblokir, lalu diarahkan ke tautan. */
+async function openFile(s) {
+  const w = window.open('', '_blank');
+  try {
+    const url = await store.files.signedUrl(s.berkas_path);
+    if (w) { w.opener = null; w.location.href = url; } else location.assign(url);
+  } catch (err) { w?.close(); failed(err); }
+}
+async function downloadFile(s) {
+  try {
+    const url = await store.files.signedUrl(s.berkas_path, s.berkas_nama || true);
+    const a = Object.assign(document.createElement('a'), { href: url, download: s.berkas_nama || '', rel: 'noopener' });
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (err) { failed(err); }
+}
+
 function srcCard(s) {
+  if (s.berkas_path) return fileCard(s);
   const url = safeUrl(s.url), host = hostOf(s.url);
   const title = s.judul || host || s.url;
   const acts = `<div class="acts"><button type="button" class="icon-btn" data-act="src-edit" data-id="${s.id}" aria-label="Ubah sumber ${esc(title)}">${pencil}</button></div>`;
@@ -1702,6 +1782,18 @@ panelEl.addEventListener('click', async e => {
     if (act === 'edit') return n.kind === 'mat' ? openMatForm(n.id) : openKatForm(n.id);
     if (act === 'split') return openSplit(n.id);
     if (act === 'play') { playing.add(b.dataset.id); return renderPanel(); }
+    if (act === 'read' || act === 'open-file' || act === 'download-file') {
+      const s = src.find(x => x.id === b.dataset.id);
+      if (!s) return;
+      if (act === 'open-file') return openFile(s);
+      if (act === 'download-file') return downloadFile(s);
+      if (reading.has(s.id)) { reading.delete(s.id); return renderPanel(); }
+      reading.add(s.id);
+      const fresh = !readerCache.has(s.id) || readerCache.get(s.id) === 'error';
+      renderPanel();
+      if (fresh) { await loadNote(s); if (reading.has(s.id)) renderPanel(); }
+      return;
+    }
     if (act === 'src-add') { srcEdit = { materiId: n.id, id: null, kelompok: b.dataset.kelompok || '' }; renderPanel(); return focusSrcForm(b.dataset.kelompok ? 'url' : null); }
     if (act === 'convert') return openConvert(n.id);
     if (act === 'src-edit') { srcEdit = { materiId: n.id, id: b.dataset.id }; playing.delete(b.dataset.id); renderPanel(); return focusSrcForm(); }
