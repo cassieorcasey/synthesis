@@ -27,3 +27,13 @@ def test_delete_materi_removes_objects(app):
     app.click('#panel [data-act="delete"]')
     app.click('#panel [data-act="delete"]')
     app.wait_for_function('window.__t.files.size === 0', timeout=5000)
+
+
+def test_delete_materi_from_stale_tab_removes_objects(app):
+    """File diunggah dari perangkat lain: tab ini belum tahu sumbernya, tapi database tahu."""
+    sid = seed(app, 'Vektor', 'dari-hp.md')
+    app.evaluate(f"window.__t.forgetLocal('{sid}')")
+    open_materi(app, 'Vektor')
+    app.click('#panel [data-act="delete"]')
+    app.click('#panel [data-act="delete"]')
+    app.wait_for_function('window.__t.files.size === 0', timeout=3000)

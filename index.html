@@ -950,6 +950,8 @@ const LocalStore = {
     if (i < 0) list.push(r); else list[i] = r;
     lsSet(LS_KEY, memDB); return clone(r);
   },
+  /** Jalur file semua sumber sebuah materi, dibaca dari penyimpanan (bukan dari daftar di tab ini). */
+  async filePaths(materiId) { return memDB.src.filter(s => s.materi_id === materiId && s.berkas_path).map(s => s.berkas_path); },
   async remove(table, id) {
     memDB[TABLE_KEY[table]] = memDB[TABLE_KEY[table]].filter(x => x.id !== id);
     if (table === T_MAT) memDB.src = memDB.src.filter(s => s.materi_id !== id);
@@ -970,6 +972,10 @@ async function makeSupabaseStore() {
     },
     async save(table, row) { return must(await sb.from(table).upsert(pick(row, COLS[table])).select(COLS[table].join(',')).single()); },
     async remove(table, id) { must(await sb.from(table).delete().eq('id', id)); },
+    async filePaths(materiId) {
+      const rows = must(await sb.from(T_SRC).select('berkas_path').eq('materi_id', materiId).not('berkas_path', 'is', null));
+      return rows.map(r => r.berkas_path);
+    },
     uid: null,
     files: {
       async upload(path, file, type) { must(await sb.storage.from(FILE_BUCKET).upload(path, file, { contentType: type, upsert: false })); },
@@ -1757,7 +1763,9 @@ async function removeSrc(id) {
   if (s?.berkas_path) await removeObjects([s.berkas_path]);
 }
 async function removeMat(id) {
-  const paths = src.filter(s => s.materi_id === id && s.berkas_path).map(s => s.berkas_path);
+  // baca dari database: sumber yang diunggah dari perangkat lain belum tentu ada di tab ini
+  const known = src.filter(s => s.materi_id === id && s.berkas_path).map(s => s.berkas_path);
+  const paths = store.files ? [...new Set([...known, ...await store.filePaths(id)])] : known;
   await store.remove(T_MAT, id);
   mat = mat.filter(x => x.id !== id);
   src = src.filter(s => s.materi_id !== id);
@@ -2262,6 +2270,8 @@ async function boot() {
     if (TESTFILES) Object.assign(window.__t, {
       files: memFiles,
       failNextSave() { failNextSave = true; },
+      /** Lupakan sumber dari daftar tab ini saja (meniru tab yang belum dimuat ulang). */
+      forgetLocal(id) { src = src.filter(x => x.id !== id); refresh(0.05); },
       /** Sisipkan sumber berkas langsung ke sebuah materi (tanpa form). */
       async seed(materiJudul, name, text) {
         const m = mat.find(x => x.judul === materiJudul), id = uuid();
