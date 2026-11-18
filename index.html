@@ -877,13 +877,29 @@ const TABLE_KEY = { [T_KAT]: 'kat', [T_MAT]: 'mat', [T_SRC]: 'src' };
 const COLS = {
   [T_KAT]: ['id', 'parent_id', 'nama', 'warna'],
   [T_MAT]: ['id', 'kategori_id', 'judul', 'catatan'],
-  [T_SRC]: ['id', 'materi_id', 'jenis', 'url', 'judul', 'kelompok'],
+  [T_SRC]: ['id', 'materi_id', 'jenis', 'url', 'judul', 'kelompok', 'berkas_path', 'berkas_nama', 'berkas_tipe', 'berkas_ukuran'],
 };
 const pick = (o, keys) => Object.fromEntries(keys.map(k => [k, o[k] ?? null]));
+
+/** Penyimpanan file tiruan di memori, hanya untuk ?demo&testfiles. Antarmukanya sama dengan Storage Supabase. */
+const memFiles = new Map();
+const memFileStore = {
+  async upload(path, file, type) {
+    if (memFiles.has(path)) throw new Error('File dengan nama itu sudah ada.');
+    memFiles.set(path, new Blob([await file.arrayBuffer()], { type }));
+  },
+  async signedUrl(path) {
+    if (!memFiles.has(path)) throw new Error('File tidak ditemukan.');
+    return URL.createObjectURL(memFiles.get(path));
+  },
+  async remove(paths) { paths.forEach(p => memFiles.delete(p)); },
+};
+let failNextSave = false;
 
 let memDB = null;
 const LocalStore = {
   mode: 'local',
+  files: TESTFILES ? memFileStore : null,
   async load() {
     memDB = lsGet(LS_KEY);
     if (!memDB) {
@@ -895,6 +911,7 @@ const LocalStore = {
     return clone(memDB);
   },
   async save(table, row) {
+    if (failNextSave) { failNextSave = false; throw new Error('Gagal menyimpan (uji).'); }
     const list = memDB[TABLE_KEY[table]], r = pick(row, COLS[table]);
     const i = list.findIndex(x => x.id === r.id);
     if (i < 0) list.push(r); else list[i] = r;
@@ -920,6 +937,14 @@ async function makeSupabaseStore() {
     },
     async save(table, row) { return must(await sb.from(table).upsert(pick(row, COLS[table])).select(COLS[table].join(',')).single()); },
     async remove(table, id) { must(await sb.from(table).delete().eq('id', id)); },
+    uid: null,
+    files: {
+      async upload(path, file, type) { must(await sb.storage.from(FILE_BUCKET).upload(path, file, { contentType: type, upsert: false })); },
+      async signedUrl(path, download) {
+        return must(await sb.storage.from(FILE_BUCKET).createSignedUrl(path, 3600, download ? { download } : undefined)).signedUrl;
+      },
+      async remove(paths) { if (paths.length) must(await sb.storage.from(FILE_BUCKET).remove(paths)); },
+    },
   };
 }
 
@@ -1600,10 +1625,25 @@ async function removeKat(id) {
   saveOpen();
   return { moved: kids.length + mats.length, up };
 }
+const currentUserId = () => store.uid || 'demo';
+
+/** Hapus objek di Storage. Gagal di sini tidak membatalkan penghapusan data; cukup diberi tahu. */
+async function removeObjects(paths) {
+  if (!paths.length || !store.files) return;
+  try { await store.files.remove(paths); } catch { toast('File di penyimpanan gagal dihapus.', 'error'); }
+}
+async function removeSrc(id) {
+  const s = src.find(x => x.id === id);
+  await store.remove(T_SRC, id);
+  src = src.filter(x => x.id !== id);
+  if (s?.berkas_path) await removeObjects([s.berkas_path]);
+}
 async function removeMat(id) {
+  const paths = src.filter(s => s.materi_id === id && s.berkas_path).map(s => s.berkas_path);
   await store.remove(T_MAT, id);
   mat = mat.filter(x => x.id !== id);
   src = src.filter(s => s.materi_id !== id);
+  await removeObjects(paths);
 }
 
 function armed(b, label = 'Klik lagi untuk menghapus') {
@@ -1635,8 +1675,7 @@ panelEl.addEventListener('click', async e => {
     if (act === 'src-cancel') { srcEdit = null; return renderPanel(); }
     if (act === 'src-delete') {
       if (!armed(b, 'Yakin?')) return;
-      await store.remove(T_SRC, b.dataset.id);
-      src = src.filter(s => s.id !== b.dataset.id);
+      await removeSrc(b.dataset.id);
       srcEdit = null;
       refresh(0.05);
       return toast('Sumber dihapus');
@@ -2023,6 +2062,7 @@ async function boot() {
     catch (err) { return toast(err.message, 'error'); }
     renderStatus();
     store.sb.auth.onAuthStateChange((event, session) => {
+      store.uid = session?.user?.id || null;
       if (session && !loaded) { if (dlgL.open) dlgL.close(); setTimeout(loadAll, 0); }
       if (event === 'SIGNED_OUT') {
         loaded = false; kat = []; mat = []; src = []; pos.clear(); selectedId = null;
@@ -2030,10 +2070,25 @@ async function boot() {
       }
     });
     const { data: { session } } = await store.sb.auth.getSession();
+    store.uid = session?.user?.id || null;
     if (!session) openLogin();
   } else {
     store = LocalStore;
     await loadAll();
+    if (TESTFILES) Object.assign(window.__t, {
+      files: memFiles,
+      failNextSave() { failNextSave = true; },
+      /** Sisipkan sumber berkas langsung ke sebuah materi (tanpa form). */
+      async seed(materiJudul, name, text) {
+        const m = mat.find(x => x.judul === materiJudul), id = uuid();
+        const file = new File([text], name, { type: '' }), path = objectPath(currentUserId(), id, name);
+        await store.files.upload(path, file, 'text/plain');
+        await saveSrc({ id, materi_id: m.id, url: null, judul: titleFromFile(name), kelompok: null, jenis: fileJenis(name, ''),
+          berkas_path: path, berkas_nama: name, berkas_tipe: 'text/plain', berkas_ukuran: file.size });
+        refresh(0.05);
+        return id;
+      },
+    });
   }
 }
 boot();
