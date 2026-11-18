@@ -98,3 +98,16 @@ def test_data_kosong(browser):
     page.click('#tidy')
     assert page.errors == []
     ctx.close()
+
+
+def test_klik_kartu_saat_animasi_tidak_membekukan_peta(app):
+    """Temuan peninjau: mousedown memicu 'start' drag; itu tidak boleh menghentikan animasi ke target."""
+    app.evaluate("""() => {
+      window.__t.openAll();
+      const el = document.querySelector('g.node.mat');
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 10, clientY: 10, view: window }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 10, clientY: 10, view: window }));
+    }""")
+    app.wait_for_timeout(900)
+    target = {k: (round(v['x'], 1), round(v['y'], 1)) for k, v in app.evaluate('window.__t.target()').items()}
+    assert pos(app) == target

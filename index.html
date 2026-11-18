@@ -1177,8 +1177,11 @@ function rebuild() {
 
 const drag = d3.drag()
   .filter(e => !e.button && !(e.type || '').startsWith('touch'))
-  .on('start', () => { stopTween(); svgEl.classList.add('dragging'); })
-  .on('drag', (e, d) => { d.x = e.x; d.y = e.y; ticked(); })   // geser sementara; Rapikan atau buka/tutup cabang mengembalikannya
+  .on('start', () => { svgEl.classList.add('dragging'); })   // mousedown biasa (klik) tidak boleh menghentikan animasi
+  .on('drag', (e, d) => {
+    if (tween) { for (const n of simNodes) if (n !== d) { n.x = n.tx; n.y = n.ty; } stopTween(); }  // mulai menyeret: yang lain langsung ke target
+    d.x = e.x; d.y = e.y; ticked();
+  })   // geser sementara; Rapikan atau buka/tutup cabang mengembalikannya
   .on('end', () => { svgEl.classList.remove('dragging'); });
 
 function draw() {
