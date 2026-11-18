@@ -1,11 +1,12 @@
--- Synthesis · skema Supabase v1
+-- Synthesis · skema Supabase v1.2
 -- Jalankan sekali di Supabase → SQL Editor, di project StudyO (bukan Wishmap).
 -- Aman dijalankan ulang. Tidak menyentuh tabel StudyO (categories, sessions, settings, active_timer).
 --
 -- Model: pohon murni.
 --   peta_kategori : kategori bersarang bebas lewat parent_id (Matematika → Aljabar → ...)
 --   peta_materi   : materi, selalu di dalam satu kategori (level mana pun)
---   peta_sumber   : link belajar per materi (youtube | web | pdf | lainnya)
+--   peta_sumber   : link belajar atau file milik sendiri per materi
+--   storage peta-berkas : file yang diunggah (v1.2)
 
 create extension if not exists pgcrypto;
 
@@ -101,6 +102,22 @@ alter table public.peta_sumber drop constraint if exists peta_sumber_kelompok_ch
 alter table public.peta_sumber add constraint peta_sumber_kelompok_check
   check (kelompok is null or length(trim(kelompok)) between 1 and 40);
 
+-- v1.2: sumber berupa file milik sendiri (disimpan di Storage, bucket peta-berkas).
+-- Sumber berisi link (url) atau file (berkas_path), minimal salah satu.
+alter table public.peta_sumber add column if not exists berkas_path   text;
+alter table public.peta_sumber add column if not exists berkas_nama   text;
+alter table public.peta_sumber add column if not exists berkas_tipe   text;
+alter table public.peta_sumber add column if not exists berkas_ukuran bigint;
+alter table public.peta_sumber alter column url drop not null;
+alter table public.peta_sumber drop constraint if exists peta_sumber_url_check;
+alter table public.peta_sumber drop constraint if exists peta_sumber_isi_check;
+alter table public.peta_sumber add constraint peta_sumber_isi_check check (
+  (url is not null and url ~* '^https?://') or (url is null and berkas_path is not null)
+);
+alter table public.peta_sumber drop constraint if exists peta_sumber_jenis_check;
+alter table public.peta_sumber add constraint peta_sumber_jenis_check
+  check (jenis in ('youtube', 'web', 'pdf', 'lainnya', 'catatan', 'berkas'));
+
 create index if not exists peta_sumber_user_idx   on public.peta_sumber (user_id);
 create index if not exists peta_sumber_materi_idx on public.peta_sumber (materi_id);
 
@@ -145,6 +162,27 @@ create policy "peta_sumber: milik sendiri" on public.peta_sumber
   for all to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid() and public.peta_milik_materi(materi_id));
+
+-- ─────────────────── Storage: file milik sendiri ───────────────────
+-- Bucket privat, maksimal 25 MB per file. Jalur objek: <user_id>/<id_sumber>/<nama-file>.
+-- File hanya dibuka lewat tautan bertanda tangan yang dibuat app untuk pemiliknya.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('peta-berkas', 'peta-berkas', false, 26214400)
+on conflict (id) do update set public = false, file_size_limit = 26214400;
+
+drop policy if exists "peta-berkas: baca milik sendiri"  on storage.objects;
+drop policy if exists "peta-berkas: unggah milik sendiri" on storage.objects;
+drop policy if exists "peta-berkas: ubah milik sendiri"  on storage.objects;
+drop policy if exists "peta-berkas: hapus milik sendiri" on storage.objects;
+create policy "peta-berkas: baca milik sendiri" on storage.objects for select to authenticated
+  using (bucket_id = 'peta-berkas' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "peta-berkas: unggah milik sendiri" on storage.objects for insert to authenticated
+  with check (bucket_id = 'peta-berkas' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "peta-berkas: ubah milik sendiri" on storage.objects for update to authenticated
+  using (bucket_id = 'peta-berkas' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'peta-berkas' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "peta-berkas: hapus milik sendiri" on storage.objects for delete to authenticated
+  using (bucket_id = 'peta-berkas' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- ───────────────────── Izin Data API ─────────────────────
 grant usage on schema public to authenticated;
