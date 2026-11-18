@@ -1301,8 +1301,10 @@ function fit(animate = true) {
   // di HP jangan mengecil sampai teks tak terbaca; sisanya digeser dengan jari
   const k = Math.max(isPhone() ? 0.62 : 0.2, Math.min(1.4, (R.x1 - R.x0 - 24) / (x1 - x0 || 1), (R.y1 - R.y0 - 24) / (y1 - y0 || 1)));
   const cx = (R.x0 + R.x1) / 2, cy = (R.y0 + R.y1) / 2;
-  const t = d3.zoomIdentity.translate(cx - k * (x0 + x1) / 2, cy - k * (y0 + y1) / 2).scale(k);
-  moveTo(t, animate ? 650 : 0);
+  // pohon lebih besar dari area (ponsel): rata kiri/atas supaya akar terbaca, sisanya digeser dengan jari
+  const tx = k * (x1 - x0) > R.x1 - R.x0 ? R.x0 + 12 - k * x0 : cx - k * (x0 + x1) / 2;
+  const ty = k * (y1 - y0) > R.y1 - R.y0 ? R.y0 + 12 - k * y0 : cy - k * (y0 + y1) / 2;
+  moveTo(d3.zoomIdentity.translate(tx, ty).scale(k), animate ? 650 : 0);
 }
 function focusNode(id) {
   const d = pos.get(id);

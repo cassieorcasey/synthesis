@@ -4,7 +4,7 @@ Peta materi belajar dalam bentuk graf yang bergerak. Kategori bersarang bebas (M
 
 ## File
 
-- `index.html` berisi seluruh app (D3-force, tanpa build step) dan siap untuk GitHub Pages.
+- `index.html` berisi seluruh app (D3, tanpa build step) dan siap untuk GitHub Pages.
 - `schema.sql` berisi tabel `peta_kategori`, `peta_materi`, `peta_sumber` beserta RLS, dan bucket Storage `peta-berkas` untuk file yang diunggah.
 - `tests/` berisi tes skema (Postgres) dan tes app (Playwright). Jalankan dengan `pytest tests`.
 
@@ -25,9 +25,10 @@ Tambahkan `?demo` di URL untuk mencoba dengan data contoh. Data mode ini tersimp
 
 ## Cara pakai
 
-- **Klik kategori** untuk membuka cabangnya. Klik lagi saat terpilih untuk melipatnya. Lingkaran putus-putus dan tanda + menandakan cabang yang masih terlipat.
+- **Klik kategori** untuk membuka cabangnya. Klik lagi saat terpilih untuk melipatnya. Kartu bertumpuk menandakan cabang yang masih terlipat.
 - **Klik materi** untuk membuka panel sumber. Video YouTube bisa diputar langsung di panel, dan link `?t=` ikut menentukan detik mulai.
 - **Tambah sumber**: tempel link, lalu jenis dan judul terisi otomatis bila bisa.
+- **Peta rapi**: pohon tersusun kiri ke kanan (kategori utama di kiri, anak di kolom kanannya, urut abjad: subkategori dulu, lalu materi) dan posisinya selalu sama. Kartu bisa diseret sementara; tombol **Rapikan** (di samping tombol zoom) atau buka/tutup cabang mengembalikannya.
 - **Unggah file sendiri**: di form sumber pilih **Berkas**, lalu pilih atau seret file (maksimal 25 MB). Catatan Markdown dan teks dibaca langsung di panel lewat tombol **Baca**, PDF dibuka di tab baru, dan file lain bisa diunduh. Untuk mengganti isi file, hapus sumbernya lalu unggah ulang.
 - **Kelompok sumber**: beri kelompok seperti Penjelasan, Latihan soal, atau Pembahasan. Panel lalu menampilkan sumber per kelompok, dan tombol "+ Tambah" di tiap kelompok langsung mengisi kelompoknya.
 - **Jadikan subkategori**: kalau satu materi ternyata perlu dipecah menjadi sub-topik, tombol ini mengubahnya menjadi subkategori di tempat yang sama. Sumber dan catatannya pindah ke materi pertama di dalamnya (default "Pengantar").
