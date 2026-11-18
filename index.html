@@ -1129,6 +1129,52 @@ function viewCenter() {
 }
 const idOf = v => (typeof v === 'object' ? v.id : v);
 
+/** Tata letak pohon kiri-ke-kanan. Murni: hanya bergantung pada struktur (D), ukuran kartu, dan simpul yang terlihat.
+ *  Mengembalikan Map id → pusat kartu {x, y}. Induk dipusatkan terhadap anaknya, tiap kolom rata kiri. */
+function treeLayout(ids, { gapX = 56, gapY = 14, rootGap = 40 } = {}) {
+  const out = new Map();
+  if (!ids.length) return out;
+  const vis = new Set(ids), box = new Map(ids.map(id => [id, boxOf(id)]));
+  const kidsOf = id => (byId.get(id).kind === 'kat' && expanded.has(id) ? [...D.kids.get(id), ...D.mats.get(id)] : []).filter(c => vis.has(c));
+  const span = new Map(), colW = [];
+  const measure = (id, d) => {
+    const b = box.get(id), ks = kidsOf(id);
+    colW[d] = Math.max(colW[d] || 0, b.w);
+    const inner = ks.reduce((t, c) => t + measure(c, d + 1), 0) + gapY * Math.max(0, ks.length - 1);
+    const h = Math.max(b.h, inner);
+    span.set(id, h);
+    return h;
+  };
+  const roots = D.roots.filter(r => vis.has(r));
+  roots.forEach(r => measure(r, 0));
+  const left = [0];
+  for (let d = 1; d < colW.length; d++) left[d] = left[d - 1] + colW[d - 1] + gapX;
+  const place = (id, d, top) => {
+    const b = box.get(id), ks = kidsOf(id);
+    let y = top + span.get(id) / 2;
+    if (ks.length) {
+      const inner = ks.reduce((t, c) => t + span.get(c), 0) + gapY * (ks.length - 1);
+      let t = top + (span.get(id) - inner) / 2;
+      const cy = [];
+      for (const c of ks) { place(c, d + 1, t); cy.push(out.get(c).y); t += span.get(c) + gapY; }
+      y = (cy[0] + cy[cy.length - 1]) / 2;
+    }
+    out.set(id, { x: left[d] + b.w / 2, y });
+  };
+  let top = 0;
+  for (const r of roots) { place(r, 0, top); top += span.get(r) + rootGap; }
+  // pusatkan seluruh pohon di (0,0)
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [id, p] of out) {
+    const b = box.get(id);
+    x0 = Math.min(x0, p.x - b.w / 2); x1 = Math.max(x1, p.x + b.w / 2);
+    y0 = Math.min(y0, p.y - b.h / 2); y1 = Math.max(y1, p.y + b.h / 2);
+  }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  for (const p of out.values()) { p.x -= cx; p.y -= cy; }
+  return out;
+}
+
 function rebuild() {
   const vis = visibleIds();
   const c0 = viewCenter();
@@ -2267,6 +2313,15 @@ async function boot() {
   } else {
     store = LocalStore;
     await loadAll();
+    if (TESTFILES) Object.assign(window.__t, {
+      treeLayout,
+      openAll() { expanded = new Set(kat.map(k => k.id)); refresh(0.05); },
+      order(id) { return byId.get(id)?.kind === 'kat' ? [...D.kids.get(id), ...D.mats.get(id)] : []; },
+      nodes() {
+        const L = treeLayout(visibleIds());
+        return [...L].map(([id, p]) => { const b = boxOf(id); return { id, x: p.x, y: p.y, w: b.w, h: b.h, parent: parentOf(id) }; });
+      },
+    });
     if (TESTFILES) Object.assign(window.__t, {
       files: memFiles,
       failNextSave() { failNextSave = true; },
