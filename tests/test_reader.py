@@ -63,3 +63,23 @@ def test_search_finds_file_name(app):
     app.fill('#q', 'ringkasan-vektor')
     app.wait_for_selector(f'#side-list [data-src="{sid}"]')
     assert 'undefined' not in app.inner_text('#side-list')
+
+
+def test_note_cannot_trigger_app_actions(app):
+    victim = seed(app, 'Determinan', 'korban.md', '# korban')
+    bad = (f'<a data-act="delete">Lihat jawaban</a>\n\n'
+           f'<button data-act="src-delete" data-id="{victim}">klik</button>\n\n'
+           f'<p style="position:fixed;inset:0">overlay</p>')
+    sid = seed(app, 'Determinan', 'jebakan.md', bad)
+    open_materi(app, 'Determinan')
+    app.click(f'{card(app, sid)} [data-act="read"]')
+    app.wait_for_selector(f'{card(app, sid)} .reader.md')
+    reader = f'{card(app, sid)} .reader'
+    assert app.locator(f'{reader} [data-act]').count() == 0
+    assert app.locator(f'{reader} [style]').count() == 0
+    assert app.locator(f'{reader} button').count() == 0
+    app.click(f'{reader} >> text=Lihat jawaban')
+    app.click(f'{reader} >> text=Lihat jawaban')
+    app.wait_for_timeout(300)
+    assert app.locator('#panel h2:has-text("Determinan")').count() == 1
+    assert app.locator(card(app, victim)).count() == 1

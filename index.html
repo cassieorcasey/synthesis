@@ -1495,7 +1495,12 @@ async function loadNote(s) {
       mdReady ||= Promise.all(MD_LIBS.map(loadScript)).catch(e => { mdReady = null; throw e; }),
     ]);
     const raw = extOf(s.berkas_nama) === 'txt' ? `<pre>${esc(text)}</pre>` : window.marked.parse(text);
-    const clean = window.DOMPurify.sanitize(raw, { USE_PROFILE: { html: true } });
+    // Catatan bisa berasal dari orang lain: buang semua yang bisa meniru kontrol app (data-*, style, elemen form).
+    const clean = window.DOMPurify.sanitize(raw, {
+      USE_PROFILE: { html: true }, ALLOW_DATA_ATTR: false,
+      FORBID_ATTR: ['style', 'id', 'class', 'name', 'form', 'formaction'],
+      FORBID_TAGS: ['form', 'input', 'button', 'select', 'textarea', 'option', 'style', 'dialog'],
+    });
     const box = document.createElement('div');
     box.innerHTML = clean;
     box.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
@@ -1770,6 +1775,7 @@ function armed(b, label = 'Klik lagi untuk menghapus') {
 
 /* ───────────── Panel: aksi ───────────── */
 panelEl.addEventListener('click', async e => {
+  if (e.target.closest('.reader')) return; // isi catatan tidak pernah menjalankan aksi app
   const b = e.target.closest('[data-act]');
   if (!b) return;
   const n = byId.get(selectedId);
