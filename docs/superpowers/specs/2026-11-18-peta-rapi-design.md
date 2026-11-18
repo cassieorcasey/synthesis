@@ -22,7 +22,7 @@ Peta sekarang memakai simulasi fisika (d3-force) dan anak baru muncul di sudut a
 ## Keputusan (pengguna memilih opsi 1; sisanya pilihanku)
 - Tata letak dihitung fungsi murni `layoutTree()` memakai ukuran kartu (`w`, `h`): tinggi subpohon = maks(tinggi kartu, jumlah tinggi anak + jarak); induk dipusatkan terhadap anaknya; lebar kolom = kartu terlebar di kedalaman itu + jarak.
 - Kategori utama (akar) ditumpuk vertikal di kolom pertama, warna cabang tetap.
-- Urutan anak: subkategori dulu, lalu materi, masing-masing menurut urutan yang sudah dipakai `derive()` (urutan input). *Pilihanku.*
+- Urutan anak: subkategori dulu, lalu materi, masing-masing urut abjad seperti yang sudah dilakukan `derive()` (bukan urutan input; dikoreksi setelah membaca kode). *Pilihanku.*
 - d3-force dibuang. Posisi bergerak lewat transisi (tanpa transisi bila `prefers-reduced-motion`).
 - Seret simpul = geser sementara; tombol **Rapikan** mengembalikan semua ke tata letak. Muat ulang atau buka/tutup cabang juga merapikan kembali. *Pilihanku.*
 - Zoom, hover, semantic zoom, pencarian, dan panel samping tidak berubah. Garis tetap kurva Bézier dari tepi kanan induk ke tepi kiri anak.
@@ -32,7 +32,7 @@ Nilai jarak antar kolom dan antar baris, dan detail transisi.
 
 ## Pengujian
 - Tidak ada dua kartu yang kotaknya beririsan (pohon contoh besar, dalam, dan acak).
-- Setiap anak berada di kanan induknya; urutan anak sama dengan urutan data.
+- Setiap anak berada di kanan induknya; urutan anak sama dengan urutan `derive()` (abjad).
 - Dua kali muat dengan data sama menghasilkan posisi identik.
 - Buka lalu tutup cabang kembali ke posisi semula.
 - Seret lalu klik Rapikan mengembalikan posisi.
