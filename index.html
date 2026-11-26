@@ -142,14 +142,23 @@ button { cursor: pointer; }
 .node.kat:not(.root) .t { font: 650 14px/1 var(--font-ui); }
 .node.kat .pip { fill: var(--cc); }
 .node.kat .stack { fill: color-mix(in srgb, var(--cc) 7%, var(--card)); stroke: var(--cc); stroke-opacity: .45; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.node .badge .pop { transform-box: fill-box; transform-origin: center; }
+.node .badge .pop.tick { animation: badge-pop var(--dur-med) var(--ease-spring); }
+@keyframes badge-pop { 45% { transform: scale(1.16); } }
 .node .badge rect { fill: color-mix(in srgb, var(--cc) 18%, var(--card)); }
 .node .badge text { fill: color-mix(in srgb, var(--cc), var(--fg) 40%); font: 700 11.5px/1 var(--font-ui); font-variant-numeric: tabular-nums; text-anchor: middle; }
 
 .node.mat .shape { fill: var(--card); stroke: var(--chip-line); stroke-width: 1; }
 .node.mat .t { font: 550 12.5px/1 var(--font-ui); }
 .node.mat .ico { fill: var(--cc); stroke: var(--cc); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
-.node.mat.nosrc .ico { fill: none; }
-.node.mat .far { fill: var(--cc); display: none; }
+/* Kesiapan materi: benih (0 sumber) cincin putus-putus, terkurasi titik penuh, matang titik + halo konsentris.
+   pathLength=8 membuat putus-putusnya sama rapat di ikon kartu (r 4) maupun titik konstelasi (r 7,5). */
+.node.mat.nosrc .ico, .peek.nosrc .ico { fill: none; stroke-dasharray: .5 .5; stroke-linecap: butt; vector-effect: none; }
+#map[data-zoom="far"] .node.mat.nosrc .ico { stroke-width: 3.4; }   /* non-scaling-stroke mengabaikan pathLength, jadi tebal diatur per level */
+.node.mat .halo { fill: none; stroke: var(--cc); stroke-opacity: .5; stroke-width: 1; vector-effect: non-scaling-stroke; display: none; }
+.node.mat.ripe .halo { display: inline; }
+.node.mat .t { transition: opacity var(--dur-med) var(--ease-spring), transform var(--dur-med) var(--ease-spring); }
+.node.mat .hit { fill: transparent; pointer-events: none; }
 
 .node.selected .shape { stroke: var(--fg); stroke-width: 2.4; }
 .node:focus-visible .shape { stroke: var(--accent); stroke-width: 3; }
@@ -160,9 +169,27 @@ button { cursor: pointer; }
 #map.focusing .node.faded, #map.focusing .link.faded { opacity: .35; }
 #map.hovering .node.hot .body { transform: scale(1.02); }
 
-/* semantic zoom: dari jauh chip materi menyusut jadi titik warna, kategori tetap terbaca */
-#map[data-zoom="far"] .node.mat:not(.selected) .chip { display: none; }
-#map[data-zoom="far"] .node.mat:not(.selected) .far { display: inline; }
+/* semantic zoom: dari jauh chip materi bermorfosis jadi titik konstelasi (geometri lewat JS), label memudar ke kiri;
+   kategori tetap kartu sebagai jangkar. Lingkaran .hit menjaga hitbox tetap saat titik mekar atau menyusut. */
+#map[data-zoom="far"] .node.mat:not(.selected) .t { opacity: 0; transform: translateX(-6px); }
+#map[data-zoom="far"] .node.mat:not(.selected) .hit { pointer-events: all; }
+
+/* Peek: pill judul di lapisan #overlay (di atas semua kartu, tanpa pointer), ukuran layar tetap */
+#overlay, #impulses { pointer-events: none; }
+/* Impuls sinaptik: segmen cahaya yang merambat dari materi ke induk sampai akar */
+.impulse { fill: none; stroke: var(--cc); stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.impulse.pos.glow { stroke-width: 7; stroke-opacity: .18; }
+.impulse.pos.core { stroke-width: 2.6; stroke-opacity: .95; }
+.impulse.neg.glow { display: none; }
+.impulse.neg.core { stroke: var(--fg-3); stroke-width: 2; stroke-opacity: .55; }
+.peek { display: none; }
+.peek.shown { display: inline; }
+.peek .shape { fill: var(--card); stroke: var(--cc); stroke-width: 1.2; vector-effect: non-scaling-stroke; filter: drop-shadow(0 4px 10px rgba(20, 20, 50, .14)); }
+.peek .ico { fill: var(--cc); stroke: var(--cc); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.peek .t { fill: var(--fg); font: 550 12.5px/1 var(--font-ui); dominant-baseline: central; opacity: 0; transform: translateX(-6px);
+  transition: opacity var(--dur-med) var(--ease-spring), transform var(--dur-med) var(--ease-spring); }
+.peek.open .t { opacity: 1; transform: none; }
+@media (hover: none) { #overlay { display: none; } }
 
 /* ── sidebar ── */
 .side {
@@ -500,7 +527,9 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
     <rect id="grid" width="100%" height="100%" fill="url(#dot-grid)"/>
     <g id="vp">
       <g id="links"></g>
+      <g id="impulses"></g>
       <g id="nodes"></g>
+      <g id="overlay" aria-hidden="true"></g>
     </g>
   </svg>
 </div>
@@ -1095,7 +1124,7 @@ function reveal(id) {
 /* ───────────── Graf (tata letak pohon) ───────────── */
 const svgEl = $('#map');
 const svg = d3.select(svgEl), vp = d3.select('#vp');
-const gL = d3.select('#links'), gN = d3.select('#nodes');
+const gL = d3.select('#links'), gN = d3.select('#nodes'), gO = d3.select('#overlay');
 let simNodes = [], simLinks = [], pos = new Map(), K = 1, T = d3.zoomIdentity, zoomLevel = 'mid';
 
 /** Gerak halus ke target pohon (tx, ty). Tanpa animasi bila prefers-reduced-motion. */
@@ -1224,10 +1253,12 @@ function draw() {
     .attr('class', 'node').attr('tabindex', 0).attr('role', 'button')
     .on('click', (e, d) => { e.stopPropagation(); onNodeClick(d.id); })
     .on('keydown', (e, d) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNodeClick(d.id); } })
-    .on('mouseenter', (e, d) => { if (canHover) { hoverId = d.id; applyHighlight(); } })
-    .on('mouseleave', () => { if (canHover) { hoverId = null; applyHighlight(); } })
+    .on('mouseenter', (e, d) => { if (canHover) { hoverId = d.id; applyHighlight(); showPeek(d); } })
+    .on('mouseleave', () => { if (canHover) { hoverId = null; applyHighlight(); hidePeek(); } })
     .call(drag);
   ne.merge(ns).each(function (d) { paintNode(this, d); }).order();
+  syncForms();
+  if (peekId && !simNodes.some(n => n.id === peekId)) hidePeek(true);
 }
 
 /** Batalkan exit yang tertunda pada elemen yang kembali terpakai, lalu pulihkan gaya dan aksesibilitasnya. */
@@ -1289,25 +1320,34 @@ const setT = (el, s) => { if (el.textContent !== s) el.textContent = s; };
 const setV = (el, k, v) => { if (el.style.getPropertyValue(k) !== v) el.style.setProperty(k, v); };
 
 /** Kerangka kartu dibuat sekali per tingkat (root/kat/mat); dibangun ulang hanya bila tingkatnya berganti. */
+let clipSeq = 0;
 function buildNode(el, tier) {
   el.replaceChildren();
   const body = mk(el, 'g', 'body'), p = { tier };
   if (tier === 'mat') {
+    mk(body, 'circle', 'hit').setAttribute('r', HIT_R);
     const chip = mk(body, 'g', 'chip');
     p.shape = mk(chip, 'rect', 'shape');
-    p.ico = mk(chip, 'circle', 'ico'); p.ico.setAttribute('r', 4);
+    p.halo = mk(chip, 'circle', 'halo');
+    p.ico = mk(chip, 'circle', 'ico'); p.ico.setAttribute('pathLength', 8);
     p.text = mk(chip, 'text', 't');
-    mk(body, 'circle', 'far').setAttribute('r', 9);
   } else {
     p.stacks = [mk(body, 'rect', 'stack'), mk(body, 'rect', 'stack')];
     if (tier === 'root') p.ring = mk(body, 'rect', 'ring');
     p.shape = mk(body, 'rect', 'shape');
     if (tier === 'kat') { p.pip = mk(body, 'circle', 'pip'); p.pip.setAttribute('r', 4.5); }
     p.text = mk(body, 'text', 't');
+    // badge: translate di atribut .badge, skala denyut di .pop (CSS), angka bergulir di .roll yang dipotong clipPath
     p.badge = mk(body, 'g', 'badge');
-    p.badgeRect = mk(p.badge, 'rect');
-    p.badgeRect.setAttribute('y', -10); p.badgeRect.setAttribute('height', 20); p.badgeRect.setAttribute('rx', 10);
-    p.badgeText = mk(p.badge, 'text');
+    p.pop = mk(p.badge, 'g', 'pop');
+    p.badgeRect = mk(p.pop, 'rect');
+    const clip = mk(p.pop, 'clipPath'), cid = 'bc-' + (++clipSeq);
+    clip.id = cid;
+    p.clipRect = mk(clip, 'rect');
+    for (const r of [p.badgeRect, p.clipRect]) { r.setAttribute('y', -10); r.setAttribute('height', 20); r.setAttribute('rx', 10); }
+    p.roll = mk(p.pop, 'g', 'roll');
+    p.roll.setAttribute('clip-path', `url(#${cid})`);
+    p.badgeText = mk(p.roll, 'text');
   }
   el.__parts = p;
   return p;
@@ -1321,7 +1361,9 @@ function paintNode(el, d) {
   cl.toggle('root', d.tier === 'root');
   cl.toggle('selected', n.id === selectedId);
   cl.toggle('custom', HEX.test(c || ''));
-  cl.toggle('nosrc', n.kind === 'mat' && !(D.srcs.get(n.id)?.length));
+  const ready = n.kind === 'mat' ? readiness(n.id) : null;
+  cl.toggle('nosrc', ready === 'seed');
+  cl.toggle('ripe', ready === 'ripe');
   setV(el, '--cc', cssColor(c)); setV(el, '--ink', inkOf(c));
 
   const x0 = -d.w / 2, y0 = -d.h / 2, b = BOX[d.tier];
@@ -1338,7 +1380,7 @@ function paintNode(el, d) {
       setA(s, 'x', x); setA(s, 'y', firstY + i * b.lh); setT(s, line);
     });
   };
-  box(p.shape);
+  if (n.kind !== 'mat') box(p.shape);
   lines(p.text, x0 + b.padL);
 
   if (n.kind === 'kat') {
@@ -1352,20 +1394,257 @@ function paintNode(el, d) {
     if (p.ring) box(p.ring, 5);
     if (p.pip) { setA(p.pip, 'cx', x0 + 16); setA(p.pip, 'cy', firstY); }
     setA(p.badge, 'transform', `translate(${x0 + d.w - b.padX - d.bw / 2},${firstY})`);
-    setA(p.badgeRect, 'x', -d.bw / 2); setA(p.badgeRect, 'width', d.bw);
-    setT(p.badgeText, d.badge);
+    for (const r of [p.badgeRect, p.clipRect]) { setA(r, 'x', -d.bw / 2); setA(r, 'width', d.bw); }
+    const shown = p.badgeText.textContent;
+    if (shown && shown !== d.badge && el.isConnected && isInViewport(d)) rollBadge(p, d.badge, Math.sign(+d.badge - +shown) || 1);
+    else if (shown !== d.badge) { finishRoll(p); setT(p.badgeText, d.badge); }
   } else {
     const k = D.srcs.get(n.id)?.length || 0;
     setA(el, 'aria-label', `Materi ${n.judul}, ${k} sumber`);
     setA(el, 'aria-expanded', null);
-    setA(p.ico, 'cx', x0 + 15); setA(p.ico, 'cy', firstY);
+    if (!el.__form) el.__form = isDot(d) ? 'dot' : 'card';
+    if (!el.__morphing) { const g = matGeom(d, el.__form === 'dot'); applyGeom(p, g); d.vw = g.w; }
   }
+}
+
+/* ───────────── Morfosis semantik: kartu materi ↔ titik konstelasi ───────────── */
+const DOT_R = 9, HIT_R = 22;
+/** Kurva cubic-bezier CSS sebagai fungsi easing JS (Newton pada sumbu x). */
+function cubicBezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const X = t => ((ax * t + bx) * t + cx) * t, Y = t => ((ay * t + by) * t + cy) * t, dX = t => (3 * ax * t + 2 * bx) * t + cx;
+  return x => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const e = X(t) - x, dx = dX(t);
+      if (Math.abs(e) < 1e-5 || Math.abs(dx) < 1e-6) break;
+      t -= e / dx;
+    }
+    return Y(Math.min(1, Math.max(0, t)));
+  };
+}
+/** Durasi dan kurva dari token gerak CSS; dibaca saat dipakai, jadi ikut prefers-reduced-motion (durasi 0ms). */
+function motion(dur = '--dur-med', ease = '--ease-spring') {
+  const cs = getComputedStyle(document.documentElement);
+  const m = cs.getPropertyValue(ease).match(/cubic-bezier\(([^)]+)\)/);
+  return {
+    ms: reduceMotion ? 0 : parseFloat(cs.getPropertyValue(dur)) || 0,
+    ease: m ? cubicBezier(...m[1].split(',').map(Number)) : d3.easeCubicOut,
+  };
+}
+const isDot = d => zoomLevel === 'far' && d.id !== selectedId;
+/** Geometri chip materi. Kartu: kotak penuh rata kiri dengan ikon di kiri. Titik: kapsul 18×18 berpusat di (0,0),
+ *  ikon membesar ke pusat. Pusat kartu juga (0,0), jadi morfosis tidak menggeser posisi simpul. */
+function matGeom(d, dot) {
+  if (dot) return { x: -DOT_R, y: -DOT_R, w: DOT_R * 2, h: DOT_R * 2, rx: DOT_R, cx: 0, cy: 0, r: 7.5 };
+  const b = BOX.mat, x0 = -d.w / 2, y0 = -d.h / 2;
+  return { x: x0, y: y0, w: d.w, h: d.h, rx: d.rx, cx: x0 + 15, cy: y0 + b.padY + b.lh / 2, r: 4 };
+}
+function applyGeom(p, g) {
+  setA(p.shape, 'x', g.x); setA(p.shape, 'y', g.y); setA(p.shape, 'width', g.w); setA(p.shape, 'height', g.h); setA(p.shape, 'rx', g.rx);
+  setA(p.ico, 'cx', g.cx); setA(p.ico, 'cy', g.cy); setA(p.ico, 'r', g.r);
+  setA(p.halo, 'cx', g.cx); setA(p.halo, 'cy', g.cy); setA(p.halo, 'r', +(g.r * 1.75).toFixed(3));
+}
+function readGeom(p) {
+  const a = (el, k) => +el.getAttribute(k) || 0;
+  return { x: a(p.shape, 'x'), y: a(p.shape, 'y'), w: a(p.shape, 'width'), h: a(p.shape, 'height'), rx: a(p.shape, 'rx'),
+    cx: a(p.ico, 'cx'), cy: a(p.ico, 'cy'), r: a(p.ico, 'r') };
+}
+/** Samakan bentuk tiap chip materi dengan level zoom dan seleksi. Hanya chip di area pandang yang dianimasikan;
+ *  sisanya langsung ke bentuk akhir. Morfosis dimulai dari geometri saat ini, jadi pembalikan di tengah jalan mulus. */
+function syncForms(animate = true) {
+  const { ms, ease } = motion();
+  let R = null, moved = false;
+  liveNodes().filter('.mat').each(function (d) {
+    const want = isDot(d) ? 'dot' : 'card';
+    if (this.__form === want || !this.__parts) return;
+    this.__form = want;
+    const el = this, p = el.__parts, sel = d3.select(el);
+    sel.interrupt('morph');
+    if (animate && ms && isInViewport(d, R || (R = viewRect()))) {
+      const i = d3.interpolateObject(readGeom(p), matGeom(d, want === 'dot'));
+      el.__morphing = true; moved = true;
+      sel.transition('morph').duration(ms).ease(ease)
+        .tween('morph', () => t => { const v = i(t); applyGeom(p, v); d.vw = v.w; })
+        .on('end', function (dd) { this.__morphing = false; const g = matGeom(dd, this.__form === 'dot'); applyGeom(p, g); dd.vw = g.w; });
+    } else {
+      el.__morphing = false;
+      const g = matGeom(d, want === 'dot');
+      applyGeom(p, g); d.vw = g.w; moved = true;
+    }
+  });
+  if (moved) followLinks(animate ? ms : 0);
+}
+/** Ujung garis mengikuti lebar visual chip (vw) selama morfosis: satu timer untuk semua garis, bukan per simpul. */
+let linkTimer = null;
+function followLinks(ms) {
+  if (linkTimer) linkTimer.stop();
+  liveLinks().attr('d', curve);
+  if (!ms) { linkTimer = null; return; }
+  linkTimer = d3.timer(e => { liveLinks().attr('d', curve); if (e >= ms) { linkTimer.stop(); linkTimer = null; } });
+}
+
+/* ───────────── Kesiapan, impuls sinaptik, odometer ───────────── */
+/** Tingkat kesiapan materi dari sumbernya: 'seed' tanpa sumber; 'ripe' bila ≥ 3 sumber atau ≥ 2 kelompok berbeda
+ *  (kelompok dibandingkan seperti di panel: tanpa beda huruf besar/kecil, spasi di tepi diabaikan, kosong tidak dihitung);
+ *  selain itu 'cur' (terkurasi). */
+function readiness(materiId) {
+  const list = D.srcs.get(materiId) || [];
+  if (!list.length) return 'seed';
+  const groups = new Set(list.map(s => (s.kelompok || '').trim().toLowerCase()).filter(Boolean));
+  return list.length >= 3 || groups.size >= 2 ? 'ripe' : 'cur';
+}
+
+/** Antre impuls dari saveSrc/removeSrc; dijalankan di frame berikutnya, setelah pemanggil selesai refresh(). */
+const rippleQueue = [];
+function queueRipple(materiId, delta) {
+  if (!rippleQueue.length) requestAnimationFrame(() => rippleQueue.splice(0).forEach(([id, dl]) => triggerSynapticRipple(id, dl)));
+  rippleQueue.push([materiId, delta]);
+}
+const rippleLog = [];   // untuk tes: kategori yang dilewati impuls, berurutan
+
+/** Impuls merambat mundur dari materi ke induk, lalu ke induknya, sampai akar, hanya lewat garis yang tampil.
+ *  Tiap lompatan menunggu yang sebelumnya; saat tiba di kategori, badge-nya berdenyut. Lompatan yang kedua ujungnya
+ *  di luar area pandang dilewati tanpa animasi. Positif: cahaya warna cabang dengan pendar; negatif: garis redup. */
+function triggerSynapticRipple(materiId, delta) {
+  if (!delta || !byId.has(materiId) || !D) return;
+  const chain = [materiId, ...ancestors(materiId).reverse()];
+  const node = new Map(simNodes.map(n => [n.id, n]));
+  const start = chain.findIndex(id => node.has(id));
+  if (start < 0) return;
+  const hops = chain.slice(start), sign = delta > 0 ? 'pos' : 'neg';
+  // kecepatan konstan-ish (ease in-out) supaya cahayanya terbaca bergerak; ease-out-expo menghabiskan jarak di frame awal
+  const { ms } = motion('--dur-flow'), ease = d3.easeSinInOut;
+  const hopMs = ms * 0.8, R = viewRect();
+  const seen = id => isInViewport(node.get(id), R);
+  if (byId.get(hops[0]).kind === 'kat') tickBadge(hops[0], !!ms && seen(hops[0]));
+  const step = i => {
+    if (i >= hops.length - 1) return;
+    const child = hops[i], parent = hops[i + 1];
+    const link = liveLinks().filter(l => l.id === 'l-' + child).node();
+    if (!ms || !link || !(seen(child) || seen(parent))) { tickBadge(parent, false); return step(i + 1); }
+    impulse(link, sign, hopMs, ease, () => { tickBadge(parent, seen(parent)); step(i + 1); });
+  };
+  step(0);
+}
+
+/** Satu lompatan: segmen pendek mengikuti kurva garis (dibaca ulang tiap frame, jadi ikut kartu yang bergerak),
+ *  kepalanya bergerak dari ujung anak (panjang L) ke ujung induk (0) lalu masuk ke balik kartu induk. */
+function impulse(link, sign, ms, ease, done) {
+  const layer = d3.select('#impulses'), cc = link.style.getPropertyValue('--cc');
+  const lines = ['glow', 'core'].map(k => layer.append('polyline').attr('class', `impulse ${sign} ${k}`).style('--cc', cc));
+  const probe = layer.append('path').attr('display', 'none').node();
+  const t = d3.timer(elapsed => {
+    if (!link.isConnected) { t.stop(); lines.forEach(l => l.remove()); probe.remove(); return done(); }
+    const e = ease(Math.min(1, elapsed / ms));
+    probe.setAttribute('d', link.getAttribute('d'));
+    const L = probe.getTotalLength(), seg = Math.min(34, L * 0.4), head = L - (L + seg) * e;
+    const a = Math.max(0, head), b = Math.min(L, head + seg), pts = [];
+    if (b > a) for (let k = 0; k <= 6; k++) { const q = probe.getPointAtLength(a + (b - a) * k / 6); pts.push(`${q.x},${q.y}`); }
+    lines.forEach(l => l.attr('points', pts.join(' ')));
+    if (elapsed >= ms) { t.stop(); lines.forEach(l => l.remove()); probe.remove(); done(); }
+  });
+}
+
+/** Denyut badge kategori yang dilewati impuls (1 → 1,16 → 1). */
+function tickBadge(id, animate) {
+  rippleLog.push({ id, animated: animate });
+  if (!animate) return;
+  const el = liveNodes().filter(d => d.id === id).node(), pop = el?.__parts?.pop;
+  if (!pop) return;
+  pop.classList.remove('tick');
+  void pop.getBoundingClientRect();
+  pop.classList.add('tick');
+}
+
+/** Odometer: angka lama bergulir keluar, angka baru masuk dari arah berlawanan (naik saat bertambah, turun saat
+ *  berkurang) dengan --ease-odometer, dipotong clipPath seukuran badge. Update beruntun menuntaskan gulungan
+ *  sebelumnya dulu, jadi paling banyak dua angka di dalam badge. */
+function finishRoll(p) {
+  d3.select(p.roll).selectAll('text.out').interrupt('roll').remove();
+  d3.select(p.badgeText).interrupt('roll').attr('transform', null);
+}
+function rollBadge(p, to, dir) {
+  finishRoll(p);
+  const { ms, ease } = motion('--dur-med', '--ease-odometer');
+  if (!ms) return setT(p.badgeText, to);
+  const old = p.badgeText, nu = mk(p.roll, 'text'), dy = 18 * dir;
+  nu.textContent = to;
+  p.badgeText = nu;
+  old.classList.add('out');
+  d3.select(old).transition('roll').duration(ms).ease(ease).attr('transform', `translate(0,${-dy})`).remove();
+  d3.select(nu).attr('transform', `translate(0,${dy})`)
+    .transition('roll').duration(ms).ease(ease).attr('transform', 'translate(0,0)')
+    .on('end', function () { this.removeAttribute('transform'); });
+  p.pop.classList.remove('tick');
+  void p.pop.getBoundingClientRect();
+  p.pop.classList.add('tick');
+}
+
+/* Peek: dari jauh, titik yang ditunjuk mekar menjadi pill judul di #overlay tanpa mengubah zoom.
+   Pill diskalakan 1/K agar ukurannya di layar tetap; hitbox simpul (.hit) tidak ikut berubah, jadi tidak berkedip. */
+let peekId = null, peekK = 1;
+function peekParts() {
+  let g = gO.select('g.peek');
+  if (g.empty()) {
+    g = gO.append('g').attr('class', 'peek');
+    g.append('rect').attr('class', 'shape');
+    g.append('circle').attr('class', 'ico').attr('pathLength', 8);
+    g.append('text').attr('class', 't').attr('x', 13).attr('y', 0);
+  }
+  return g;
+}
+function placePeek() {
+  const d = peekId && simNodes.find(n => n.id === peekId);
+  if (!d) return hidePeek(true);
+  gO.select('g.peek').attr('transform', `translate(${d.x},${d.y}) scale(${1 / peekK})`);
+}
+function showPeek(d) {
+  if (!canHover || isPhone() || d.kind !== 'mat' || !isDot(d)) return;
+  const el = gN.selectAll('g.node').filter(x => x.id === d.id).node();
+  const raw = nameOf(d.id), title = raw.length > 36 ? raw.slice(0, 35).trimEnd() + '…' : raw;
+  const W = 13 + textW(title, 'mat') + 14, H = 28, k = K, { ms, ease } = motion();
+  peekId = d.id; peekK = k;
+  const g = peekParts().interrupt('peek')
+    .classed('shown', true).classed('open', false)
+    .classed('nosrc', !!el?.classList.contains('nosrc'))
+    .classed('ripe', !!el?.classList.contains('ripe'))
+    .style('--cc', el ? el.style.getPropertyValue('--cc') : null);
+  g.select('.t').text(title);
+  placePeek();
+  const from = { x: -DOT_R * k, y: -DOT_R * k, w: DOT_R * 2 * k, h: DOT_R * 2 * k, rx: DOT_R * k, r: 7.5 * k };
+  const to = { x: -H / 2, y: -H / 2, w: W + H / 2, h: H, rx: H / 2, r: 4.5 };
+  const rect = g.select('.shape'), ico = g.select('.ico');
+  const put = v => { rect.attr('x', v.x).attr('y', v.y).attr('width', v.w).attr('height', v.h).attr('rx', v.rx); ico.attr('cx', 0).attr('cy', 0).attr('r', v.r); };
+  put(from);
+  void g.node().getBoundingClientRect();
+  g.classed('open', true);
+  if (!ms) return put(to);
+  const i = d3.interpolateObject(from, to);
+  g.transition('peek').duration(ms).ease(ease).tween('peek', () => t => put(i(t)));
+}
+function hidePeek(now = false) {
+  if (!peekId) return;
+  const g = gO.select('g.peek'), d = simNodes.find(n => n.id === peekId), { ms, ease } = motion('--dur-fast');
+  peekId = null;
+  g.interrupt('peek').classed('open', false);
+  if (now || !ms || !d) { g.classed('shown', false); return; }
+  const k = peekK, rect = g.select('.shape'), ico = g.select('.ico');
+  const i = d3.interpolateObject(
+    { x: +rect.attr('x'), y: +rect.attr('y'), w: +rect.attr('width'), h: +rect.attr('height'), rx: +rect.attr('rx'), r: +ico.attr('r') },
+    { x: -DOT_R * k, y: -DOT_R * k, w: DOT_R * 2 * k, h: DOT_R * 2 * k, rx: DOT_R * k, r: 7.5 * k });
+  g.transition('peek').duration(ms).ease(ease)
+    .tween('peek', () => t => { const v = i(t); rect.attr('x', v.x).attr('y', v.y).attr('width', v.w).attr('height', v.h).attr('rx', v.rx); ico.attr('r', v.r); })
+    .on('end', () => g.classed('shown', false));
 }
 
 /** Kurva Bézier dari tepi kanan induk ke tepi kiri anak (anak yang sedang keluar ikut menyusut, s < 1). */
 function curve(l) {
-  const sx = l.source.x + l.source.w * (l.source.s ?? 1) / 2, sy = l.source.y;
-  const tx = l.target.x - l.target.w * (l.target.s ?? 1) / 2, ty = l.target.y;
+  const sx = l.source.x + (l.source.vw ?? l.source.w) * (l.source.s ?? 1) / 2, sy = l.source.y;
+  const tx = l.target.x - (l.target.vw ?? l.target.w) * (l.target.s ?? 1) / 2, ty = l.target.y;
   const mx = (sx + tx) / 2;
   return `M${sx},${sy}C${mx},${sy} ${mx},${ty} ${tx},${ty}`;
 }
@@ -1373,6 +1652,7 @@ function curve(l) {
 function ticked() {
   liveNodes().attr('transform', d => `translate(${d.x},${d.y})`);
   liveLinks().attr('d', curve);
+  if (peekId) placePeek();
 }
 
 /* Zoom + kanvas titik tak hingga */
@@ -1387,8 +1667,12 @@ let gridS = 24;
 function applyZoom(t) {
   T = t; K = t.k;
   vp.attr('transform', t);
-  const z = K < 0.5 ? 'far' : K < 1.5 ? 'mid' : 'near';
-  if (z !== zoomLevel) { zoomLevel = z; svgEl.dataset.zoom = z; }
+  if (peekId && K !== peekK) hidePeek(true);
+  // histeresis: masuk far di bawah 0,46, keluar di atas 0,54 (near: 1,55 / 1,45), supaya pinch di ambang tidak berkedip
+  const far = zoomLevel === 'far' ? K < 0.54 : K < 0.46;
+  const near = !far && (zoomLevel === 'near' ? K > 1.45 : K > 1.55);
+  const z = far ? 'far' : near ? 'near' : 'mid';
+  if (z !== zoomLevel) { zoomLevel = z; svgEl.dataset.zoom = z; syncForms(); }
   let s = 24 * K;
   while (s < 16) s *= 2;
   while (s > 44) s /= 2;
@@ -1500,6 +1784,7 @@ function select(id, { focus = true } = {}) {
   renderPanel();
   renderSide();
   applyHighlight();
+  syncForms();
   if (selectedId && focus) setTimeout(() => focusNode(selectedId), reduceMotion ? 0 : 60);
 }
 
@@ -1885,7 +2170,14 @@ function upsertLocal(list, row) {
 }
 async function saveKat(row) { const r = await store.save(T_KAT, row); upsertLocal(kat, r); return r; }
 async function saveMat(row) { const r = await store.save(T_MAT, row); upsertLocal(mat, r); return r; }
-async function saveSrc(row) { const r = await store.save(T_SRC, row); upsertLocal(src, r); return r; }
+async function saveSrc(row) {
+  const before = src.find(x => x.id === row.id);
+  const r = await store.save(T_SRC, row);
+  upsertLocal(src, r);
+  if (!before) queueRipple(r.materi_id, +1);
+  else if (before.materi_id !== r.materi_id) { queueRipple(before.materi_id, -1); queueRipple(r.materi_id, +1); }
+  return r;
+}
 
 /** Hapus kategori: isinya (subkategori dan materi) naik satu tingkat ke induknya. Kategori utama harus kosong. */
 async function removeKat(id) {
@@ -1914,6 +2206,7 @@ async function removeSrc(id) {
   const s = src.find(x => x.id === id);
   await store.remove(T_SRC, id);
   src = src.filter(x => x.id !== id);
+  if (s) queueRipple(s.materi_id, -1);
   if (s?.berkas_path) await removeObjects([s.berkas_path]);
 }
 async function removeMat(id) {
@@ -2433,6 +2726,15 @@ async function boot() {
       rename(id, name) { const k = kat.find(x => x.id === id), m = mat.find(x => x.id === id); if (k) k.nama = name; if (m) m.judul = name; refresh(0.05); },
       addMat(kategoriId, judul) { mat.push({ id: uuid(), kategori_id: kategoriId, judul, catatan: null }); refresh(0.05); },
       collapse,
+      ripples: rippleLog,
+      ancestorsOf: ancestors,
+      srcIds(materiId) { return src.filter(x => x.materi_id === materiId).map(x => x.id); },
+      async addSrc(materiId, kelompok) {
+        const r = await saveSrc({ id: uuid(), materi_id: materiId, url: 'https://example.com/' + uuid(), judul: 'Uji', jenis: 'web', kelompok });
+        refresh(0.05);
+        return r.id;
+      },
+      async delSrc(id) { await removeSrc(id); refresh(0.05); },
       fitNow() { fit(false); },
       panTo(x, y, k) { svg.call(zoom.transform, d3.zoomIdentity.translate(x, y).scale(k)); },
       inView(id) { const n = simNodes.find(d => d.id === id); return !!n && isInViewport(n); },
