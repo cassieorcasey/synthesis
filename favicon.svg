@@ -1,11 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
-  <!-- Synthesis: Prisma Lapis & Pasak Inti. Grid 30, lempeng 14×6, pasak 6×28, celah 5 (16.7%), rx 1.75. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30" shape-rendering="geometricPrecision">
   <style>
-    .s { fill: #1E293B; } .v { fill: #E05A2B; }
-    @media (prefers-color-scheme: dark) { .s { fill: #CBD5E1; } .v { fill: #FB7144; } }
+    .layer { fill: #1E293B; }
+    .keystone { fill: #E05A2B; }
+    @media (prefers-color-scheme: dark) {
+      .layer { fill: #CBD5E1; }
+      .keystone { fill: #FB7144; }
+    }
   </style>
-  <rect x="1" y="1" width="14" height="6" rx="1.75" class="s"/>
-  <rect x="4" y="12" width="14" height="6" rx="1.75" class="s"/>
-  <rect x="1" y="23" width="14" height="6" rx="1.75" class="s"/>
-  <rect x="23" y="1" width="6" height="28" rx="1.75" class="v"/>
+  <rect x="2" y="2" width="16" height="6" rx="2" class="layer"/>
+  <rect x="4.5" y="12" width="16" height="6" rx="2" class="layer"/>
+  <rect x="2" y="22" width="16" height="6" rx="2" class="layer"/>
+  <rect x="23" y="2" width="5" height="26" rx="2" class="keystone"/>
 </svg>
