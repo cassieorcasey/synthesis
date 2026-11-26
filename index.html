@@ -194,6 +194,8 @@ button { cursor: pointer; }
 .impulse.pos.core { stroke-width: 2.6; stroke-opacity: .95; }
 .impulse.neg.glow { display: none; }
 .impulse.neg.core { stroke: var(--fg-3); stroke-width: 2; stroke-opacity: .55; }
+#map.focusing .impulse.is-sibling { opacity: .75; }
+#map.focusing .impulse.is-distant { opacity: .5; }
 .peek { display: none; }
 .peek.shown { display: inline; }
 .peek .shape { fill: var(--card); stroke: var(--cc); stroke-width: 1.2; vector-effect: non-scaling-stroke; filter: drop-shadow(0 4px 10px rgba(20, 20, 50, .14)); }
@@ -799,7 +801,10 @@ const canonGroup = (v, materiId) => {
   return pool.find(x => x.toLowerCase() === g.toLowerCase()) || g;
 };
 const groupRank = g => { if (!g) return 1000; const i = GROUP_ORDER.indexOf(g.toLowerCase()); return i < 0 ? 100 : i; };
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// hidup: ikut bila setelan OS diubah di tengah sesi, sama seperti token gerak CSS
+const reduceMq = matchMedia('(prefers-reduced-motion: reduce)');
+let reduceMotion = reduceMq.matches;
+reduceMq.addEventListener('change', e => { reduceMotion = e.matches; });
 const canHover = matchMedia('(hover: hover)').matches;
 const isPhone = () => innerWidth <= 760;
 
@@ -1308,6 +1313,8 @@ function draw() {
   ne.merge(ns).each(function (d) { paintNode(this, d); }).order();
   syncForms();
   if (peekId && !simNodes.some(n => n.id === peekId)) hidePeek(true);
+  // simpul yang sedang di-hover ikut keluar (cabang dilipat/dihapus): mouseleave tidak akan datang, jadi lepaskan di sini
+  if (hoverId && !simNodes.some(n => n.id === hoverId)) { hoverId = null; applyHighlight(); }
 }
 
 /** Batalkan exit yang tertunda pada elemen yang kembali terpakai, lalu pulihkan gaya dan aksesibilitasnya. */
@@ -1584,7 +1591,9 @@ function triggerSynapticRipple(materiId, delta) {
  *  kepalanya bergerak dari ujung anak (panjang L) ke ujung induk (0) lalu masuk ke balik kartu induk. */
 function impulse(link, sign, ms, ease, done) {
   const layer = d3.select('#impulses'), cc = link.style.getPropertyValue('--cc');
-  const lines = ['glow', 'core'].map(k => layer.append('polyline').attr('class', `impulse ${sign} ${k}`).style('--cc', cc));
+  // ikut lapisan fokus garisnya: cahaya terang di atas garis yang diredupkan terbaca sebagai fokus palsu
+  const dim = ['is-sibling', 'is-distant'].find(c => link.classList.contains(c)) || '';
+  const lines = ['glow', 'core'].map(k => layer.append('polyline').attr('class', `impulse ${sign} ${k} ${dim}`).style('--cc', cc));
   const probe = layer.append('path').attr('display', 'none').node();
   const t = d3.timer(elapsed => {
     if (!link.isConnected) { t.stop(); lines.forEach(l => l.remove()); probe.remove(); return done(); }
@@ -1601,6 +1610,7 @@ function impulse(link, sign, ms, ease, done) {
 /** Denyut badge kategori yang dilewati impuls (1 → 1,16 → 1). */
 function tickBadge(id, animate) {
   rippleLog.push({ id, animated: animate });
+  if (rippleLog.length > 64) rippleLog.splice(0, rippleLog.length - 64);   // log tes, jangan tumbuh sepanjang sesi
   if (!animate) return;
   const el = liveNodes().filter(d => d.id === id).node(), pop = el?.__parts?.pop;
   if (!pop) return;
@@ -1876,15 +1886,18 @@ function collapse(id) {
   applyHighlight();
 }
 /** Pilih simpul: buka cabangnya bila perlu, buka panel, arahkan kamera. */
+let focusTimer = 0;
 function select(id, { focus = true } = {}) {
   if (id !== selectedId) { srcEdit = null; playing.clear(); }
   selectedId = id && byId.has(id) ? id : null;
+  if (peekId && peekId === selectedId) hidePeek(true);   // titik yang diklik dari jauh kembali jadi kartu berlabel sendiri
+  clearTimeout(focusTimer);
   if (selectedId && reveal(selectedId)) refresh(0.45);
   renderPanel();
   renderSide();
   applyHighlight();
   syncForms();
-  if (selectedId && focus) setTimeout(() => focusNode(selectedId), reduceMotion ? 0 : 60);
+  if (selectedId && focus) focusTimer = setTimeout(() => focusNode(selectedId), reduceMotion ? 0 : 60);
   else startFlow();
 }
 
@@ -2209,7 +2222,7 @@ function kategoriPanel(n) {
 }
 
 /* ───────────── Study-Flow Stepper ───────────── */
-let flowLock = null;
+let flowLock = null, flowUnlock = null;
 /** Tandai tahap aktif: tahap terakhir yang kepalanya sudah melewati tepi bawah stepper. */
 function syncFlow(force) {
   const nav = panelEl.querySelector('nav.flow');
@@ -2247,10 +2260,15 @@ function flowTo(i) {
   if (!nav || !g) return;
   const top = panelEl.scrollTop + g.getBoundingClientRect().top - nav.getBoundingClientRect().bottom - 10;
   syncFlow(i);
+  flowUnlock?.();   // klik beruntun: kunci lama (listener + timer) dilepas dulu, supaya tidak membuka kunci yang baru
   flowLock = i;
-  const unlock = () => { flowLock = null; panelEl.removeEventListener('scrollend', unlock); };
+  const unlock = () => {
+    clearTimeout(timer); panelEl.removeEventListener('scrollend', unlock);
+    if (flowUnlock === unlock) { flowLock = null; flowUnlock = null; }
+  };
+  const timer = setTimeout(unlock, 900);
   panelEl.addEventListener('scrollend', unlock);
-  setTimeout(unlock, 900);
+  flowUnlock = unlock;
   panelEl.scrollTo({ top: Math.max(0, top), behavior: motion().ms ? 'smooth' : 'auto' });
 }
 let flowRaf = 0;
@@ -2917,7 +2935,16 @@ document.addEventListener('keydown', e => {
     else setMenu(false);
   }
 });
-addEventListener('resize', () => { if (!isPhone()) setMenu(false); });
+// rotasi/ubah lebar dengan panel terbuka: area bebas berubah (bottom sheet ↔ panel samping), bingkai ulang simpul terpilih.
+// hanya bila lebar berubah, supaya keyboard virtual (tinggi saja) tidak menggeser kamera
+let lastW = innerWidth, refocusTimer = 0;
+addEventListener('resize', () => {
+  if (!isPhone()) setMenu(false);
+  if (innerWidth === lastW) return;
+  lastW = innerWidth;
+  clearTimeout(refocusTimer);
+  refocusTimer = setTimeout(() => { if (selectedId) focusNode(selectedId); }, 180);
+});
 
 /* ───────────── Mulai ───────────── */
 function layoutFresh() {
