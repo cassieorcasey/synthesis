@@ -56,6 +56,13 @@
   --bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
   --side-w: 272px;
   --panel-w: 392px;
+
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-odometer: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 180ms;
+  --dur-med: 320ms;
+  --dur-flow: 520ms;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -109,11 +116,9 @@ button { cursor: pointer; }
 }
 
 /* ── kanvas ── */
-#stage {
-  position: fixed; inset: 0;
-  background-image: radial-gradient(circle, var(--dot) 1.1px, transparent 1.4px);
-  background-size: 24px 24px;
-}
+#stage { position: fixed; inset: 0; }
+#grid { pointer-events: none; }
+#dot-grid circle { fill: var(--dot); }
 #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 #map.dragging { cursor: grabbing; }
 
@@ -478,6 +483,7 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
   .seg span { font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur-med: 0ms; --dur-flow: 0ms; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 </style>
@@ -486,7 +492,13 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
 
 <div id="stage">
   <svg id="map" data-zoom="mid" aria-label="Peta materi">
-    <g id="vp" style="--inv: 1">
+    <defs>
+      <pattern id="dot-grid" patternUnits="userSpaceOnUse" width="24" height="24">
+        <circle cx="12" cy="12" r="1.25"/>
+      </pattern>
+    </defs>
+    <rect id="grid" width="100%" height="100%" fill="url(#dot-grid)"/>
+    <g id="vp">
       <g id="links"></g>
       <g id="nodes"></g>
     </g>
@@ -1081,7 +1093,7 @@ function reveal(id) {
 }
 
 /* ───────────── Graf (tata letak pohon) ───────────── */
-const svgEl = $('#map'), stageEl = $('#stage');
+const svgEl = $('#map');
 const svg = d3.select(svgEl), vp = d3.select('#vp');
 const gL = d3.select('#links'), gN = d3.select('#nodes');
 let simNodes = [], simLinks = [], pos = new Map(), K = 1, T = d3.zoomIdentity, zoomLevel = 'mid';
@@ -1163,12 +1175,15 @@ function rebuild() {
   const L = treeLayout(vis);
   // kartu yang tidak terlihat dilupakan; yang baru lahir di posisi induknya lalu bergerak ke targetnya
   for (const id of [...pos.keys()]) if (!visSet.has(id) || !byId.has(id)) pos.delete(id);
+  // kartu yang sedang keluar lalu dibuka lagi melanjutkan dari posisinya sekarang, bukan lompat ke induk
   for (const id of vis) {
     if (pos.has(id)) continue;
+    const back = dying.get(id);
+    if (back) { pos.set(id, { x: back.x, y: back.y }); continue; }
     const t = L.get(id), p = pos.get(parentOf(id));
     pos.set(id, { x: p ? p.x : t.x, y: p ? p.y : t.y });
   }
-  simNodes = vis.map(id => Object.assign(pos.get(id), { id, kind: byId.get(id).kind, depth: D.depth.get(id) || 0, tx: L.get(id).x, ty: L.get(id).y }, boxOf(id)));
+  simNodes = vis.map(id => Object.assign(pos.get(id), { id, kind: byId.get(id).kind, pid: parentOf(id), depth: D.depth.get(id) || 0, tx: L.get(id).x, ty: L.get(id).y }, boxOf(id)));
   const nodeOf = new Map(simNodes.map(n => [n.id, n]));
   simLinks = vis.filter(id => parentOf(id) && visSet.has(parentOf(id))).map(id => ({
     id: 'l-' + id, type: byId.get(id).kind === 'kat' ? 'kk' : 'km', source: nodeOf.get(parentOf(id)), target: nodeOf.get(id),
@@ -1185,17 +1200,28 @@ const drag = d3.drag()
   })   // geser sementara; Rapikan atau buka/tutup cabang mengembalikannya
   .on('end', () => { svgEl.classList.remove('dragging'); });
 
+/* Siklus hidup DOM peta: join berkunci id, elemen dibuat sekali lalu ditambal; yang keluar menyusut ke
+   leluhur terlihat terdekat selama EXIT_MS, dan bisa dihidupkan kembali bila cabangnya dibuka sebelum selesai. */
+const EXIT_MS = 220;
+const dying = new Map();   // id → datum kartu yang sedang keluar (posisinya dipakai bila lahir kembali)
+const liveNodes = () => gN.selectAll('g.node:not(.exiting)');
+const liveLinks = () => gL.selectAll('path:not(.exiting)');
+
 function draw() {
   const ls = gL.selectAll('path').data(simLinks, d => d.id);
-  ls.exit().remove();
+  const ns = gN.selectAll('g.node').data(simNodes, d => d.id);
+  exitNodes(ns.exit().filter(':not(.exiting)'));
+  exitLinks(ls.exit().filter(':not(.exiting)'));
+
+  revive(ls);
   ls.enter().append('path').merge(ls)
     .attr('class', d => `link ${d.type}`)
     .style('--cc', d => lineColor(D.color.get(idOf(d.target))));
 
-  const ns = gN.selectAll('g.node').data(simNodes, d => d.id);
-  ns.exit().remove();
+  revive(ns);
+  ns.each(d => dying.delete(d.id));
   const ne = ns.enter().append('g')
-    .attr('tabindex', 0).attr('role', 'button')
+    .attr('class', 'node').attr('tabindex', 0).attr('role', 'button')
     .on('click', (e, d) => { e.stopPropagation(); onNodeClick(d.id); })
     .on('keydown', (e, d) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNodeClick(d.id); } })
     .on('mouseenter', (e, d) => { if (canHover) { hoverId = d.id; applyHighlight(); } })
@@ -1204,65 +1230,149 @@ function draw() {
   ne.merge(ns).each(function (d) { paintNode(this, d); }).order();
 }
 
+/** Batalkan exit yang tertunda pada elemen yang kembali terpakai, lalu pulihkan gaya dan aksesibilitasnya. */
+function revive(sel) {
+  sel.filter('.exiting').interrupt('exit')
+    .classed('exiting', false)
+    .style('opacity', null).style('pointer-events', null).style('transition', null)
+    .attr('aria-hidden', null).attr('tabindex', function () { return this.matches('g.node') ? 0 : null; });
+}
+
+/** Leluhur terdekat yang masih tampil (objek posisi hidup), tujuan kartu yang keluar. */
+function anchorOf(d) {
+  let a = d.pid, k = 0;
+  while (a && !pos.has(a) && k++ < 64) a = byId.has(a) ? parentOf(a) : null;
+  return a ? pos.get(a) : null;
+}
+
+function exitNodes(sel) {
+  if (sel.empty()) return;
+  sel.each(d => dying.set(d.id, d))
+    .classed('exiting', true).attr('aria-hidden', 'true').attr('tabindex', -1)
+    .style('pointer-events', 'none').style('transition', 'none');
+  if (reduceMotion) { sel.each(d => dying.delete(d.id)).remove(); return; }
+  sel.lower();   // di belakang semua kartu: terserap ke balik induknya, bukan menimpa labelnya
+  sel.transition('exit').duration(EXIT_MS).ease(d3.easeCubicOut)
+    .tween('exit', function (d) {
+      const el = this, a = anchorOf(d), x0 = d.x, y0 = d.y, o0 = +getComputedStyle(el).opacity || 1;
+      return t => {
+        if (a) { d.x = x0 + (a.x - x0) * t; d.y = y0 + (a.y - y0) * t; }
+        d.s = 1 - 0.7 * t;
+        el.setAttribute('transform', `translate(${d.x},${d.y}) scale(${d.s})`);
+        el.style.opacity = o0 * (1 - t);
+      };
+    })
+    .on('end', function (d) { if (dying.get(d.id) === d) dying.delete(d.id); this.remove(); });
+}
+
+function exitLinks(sel) {
+  if (sel.empty()) return;
+  sel.classed('exiting', true).style('pointer-events', 'none').style('transition', 'none');
+  if (reduceMotion) { sel.remove(); return; }
+  sel.transition('exit').duration(EXIT_MS).ease(d3.easeCubicOut)
+    .tween('exit', function (l) {
+      const el = this, o0 = +getComputedStyle(el).opacity || 1;
+      return t => { el.setAttribute('d', curve(l)); el.style.opacity = o0 * (1 - t); };
+    })
+    .on('end', function () { this.remove(); });
+}
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+const mk = (parent, tag, cls) => { const e = document.createElementNS(SVGNS, tag); if (cls) e.setAttribute('class', cls); parent.appendChild(e); return e; };
+/** Tulis atribut/teks/variabel hanya bila nilainya berubah, supaya transisi CSS yang sedang berjalan tidak terganggu. */
+function setA(el, k, v) {
+  if (v == null) { if (el.hasAttribute(k)) el.removeAttribute(k); return; }
+  v = String(v);
+  if (el.getAttribute(k) !== v) el.setAttribute(k, v);
+}
+const setT = (el, s) => { if (el.textContent !== s) el.textContent = s; };
+const setV = (el, k, v) => { if (el.style.getPropertyValue(k) !== v) el.style.setProperty(k, v); };
+
+/** Kerangka kartu dibuat sekali per tingkat (root/kat/mat); dibangun ulang hanya bila tingkatnya berganti. */
+function buildNode(el, tier) {
+  el.replaceChildren();
+  const body = mk(el, 'g', 'body'), p = { tier };
+  if (tier === 'mat') {
+    const chip = mk(body, 'g', 'chip');
+    p.shape = mk(chip, 'rect', 'shape');
+    p.ico = mk(chip, 'circle', 'ico'); p.ico.setAttribute('r', 4);
+    p.text = mk(chip, 'text', 't');
+    mk(body, 'circle', 'far').setAttribute('r', 9);
+  } else {
+    p.stacks = [mk(body, 'rect', 'stack'), mk(body, 'rect', 'stack')];
+    if (tier === 'root') p.ring = mk(body, 'rect', 'ring');
+    p.shape = mk(body, 'rect', 'shape');
+    if (tier === 'kat') { p.pip = mk(body, 'circle', 'pip'); p.pip.setAttribute('r', 4.5); }
+    p.text = mk(body, 'text', 't');
+    p.badge = mk(body, 'g', 'badge');
+    p.badgeRect = mk(p.badge, 'rect');
+    p.badgeRect.setAttribute('y', -10); p.badgeRect.setAttribute('height', 20); p.badgeRect.setAttribute('rx', 10);
+    p.badgeText = mk(p.badge, 'text');
+  }
+  el.__parts = p;
+  return p;
+}
+
 function paintNode(el, d) {
   const n = byId.get(d.id), c = D.color.get(d.id);
-  const g = d3.select(el);
-  g.selectAll('*').remove();
-  const cls = ['node', n.kind];
-  if (d.tier === 'root') cls.push('root');
-  if (n.id === selectedId) cls.push('selected');
-  if (HEX.test(c || '')) cls.push('custom');
-  if (n.kind === 'mat' && !(D.srcs.get(n.id)?.length)) cls.push('nosrc');
-  g.attr('class', cls.join(' ')).style('--cc', cssColor(c)).style('--ink', inkOf(c));
+  const p = el.__parts?.tier === d.tier ? el.__parts : buildNode(el, d.tier);
+  const cl = el.classList;
+  cl.toggle('kat', n.kind === 'kat'); cl.toggle('mat', n.kind === 'mat');
+  cl.toggle('root', d.tier === 'root');
+  cl.toggle('selected', n.id === selectedId);
+  cl.toggle('custom', HEX.test(c || ''));
+  cl.toggle('nosrc', n.kind === 'mat' && !(D.srcs.get(n.id)?.length));
+  setV(el, '--cc', cssColor(c)); setV(el, '--ink', inkOf(c));
 
   const x0 = -d.w / 2, y0 = -d.h / 2, b = BOX[d.tier];
-  const body = g.append('g').attr('class', 'body');
-  const rect = (sel, cls, pad = 0, dx = 0, dy = 0) => sel.append('rect').attr('class', cls)
-    .attr('x', x0 - pad + dx).attr('y', y0 - pad + dy).attr('width', d.w + pad * 2).attr('height', d.h + pad * 2)
-    .attr('rx', d.rx + pad);
-  const text = (sel, x) => {
-    const t = sel.append('text').attr('class', 't').attr('x', x);
-    const top = y0 + b.padY + b.lh / 2;
-    d.lines.forEach((line, i) => t.append('tspan').attr('x', x).attr('y', top + i * b.lh).text(line));
-  };
   const firstY = y0 + b.padY + b.lh / 2;
+  const box = (r, pad = 0, dy = 0) => {
+    setA(r, 'x', x0 - pad); setA(r, 'y', y0 - pad + dy);
+    setA(r, 'width', d.w + pad * 2); setA(r, 'height', d.h + pad * 2); setA(r, 'rx', d.rx + pad);
+  };
+  const lines = (t, x) => {
+    setA(t, 'x', x);
+    while (t.children.length > d.lines.length) t.lastElementChild.remove();
+    d.lines.forEach((line, i) => {
+      const s = t.children[i] || mk(t, 'tspan');
+      setA(s, 'x', x); setA(s, 'y', firstY + i * b.lh); setT(s, line);
+    });
+  };
+  box(p.shape);
+  lines(p.text, x0 + b.padL);
 
   if (n.kind === 'kat') {
-    const total = D.total.get(n.id) || 0;
-    const closed = hasKids(n.id) && !expanded.has(n.id);
-    g.attr('aria-label', `Kategori ${pathOf(n.id)}, ${total} materi, ${hasKids(n.id) ? (closed ? 'tertutup' : 'terbuka') : 'kosong'}`)
-      .attr('aria-expanded', hasKids(n.id) ? String(!closed) : null);
+    const total = D.total.get(n.id) || 0, kids = hasKids(n.id);
+    const closed = kids && !expanded.has(n.id);
+    setA(el, 'aria-label', `Kategori ${pathOf(n.id)}, ${total} materi, ${kids ? (closed ? 'tertutup' : 'terbuka') : 'kosong'}`);
+    setA(el, 'aria-expanded', kids ? String(!closed) : null);
     // cabang tertutup: kartu bertumpuk di belakang, tanda ada isi yang bisa dibuka
-    if (closed) { rect(body, 'stack', 0, 0, 7); rect(body, 'stack', 0, 0, 3.5); }
-    if (d.tier === 'root') rect(body, 'ring', 5);
-    rect(body, 'shape');
-    if (d.tier === 'kat') body.append('circle').attr('class', 'pip').attr('cx', x0 + 16).attr('cy', firstY).attr('r', 4.5);
-    text(body, x0 + b.padL);
-    const bg = body.append('g').attr('class', 'badge')
-      .attr('transform', `translate(${x0 + d.w - b.padX - d.bw / 2},${firstY})`);
-    bg.append('rect').attr('x', -d.bw / 2).attr('y', -10).attr('width', d.bw).attr('height', 20).attr('rx', 10);
-    bg.append('text').text(d.badge);
+    box(p.stacks[0], 0, 7); box(p.stacks[1], 0, 3.5);
+    for (const s of p.stacks) setA(s, 'display', closed ? null : 'none');
+    if (p.ring) box(p.ring, 5);
+    if (p.pip) { setA(p.pip, 'cx', x0 + 16); setA(p.pip, 'cy', firstY); }
+    setA(p.badge, 'transform', `translate(${x0 + d.w - b.padX - d.bw / 2},${firstY})`);
+    setA(p.badgeRect, 'x', -d.bw / 2); setA(p.badgeRect, 'width', d.bw);
+    setT(p.badgeText, d.badge);
   } else {
     const k = D.srcs.get(n.id)?.length || 0;
-    g.attr('aria-label', `Materi ${n.judul}, ${k} sumber`);
-    const chip = body.append('g').attr('class', 'chip');
-    rect(chip, 'shape');
-    chip.append('circle').attr('class', 'ico').attr('cx', x0 + 15).attr('cy', firstY).attr('r', 4);
-    text(chip, x0 + b.padL);
-    body.append('circle').attr('class', 'far').attr('r', 9);
+    setA(el, 'aria-label', `Materi ${n.judul}, ${k} sumber`);
+    setA(el, 'aria-expanded', null);
+    setA(p.ico, 'cx', x0 + 15); setA(p.ico, 'cy', firstY);
   }
 }
 
-/** Kurva Bézier dari tepi kanan induk ke tepi kiri anak. */
+/** Kurva Bézier dari tepi kanan induk ke tepi kiri anak (anak yang sedang keluar ikut menyusut, s < 1). */
 function curve(l) {
-  const sx = l.source.x + l.source.w / 2, sy = l.source.y, tx = l.target.x - l.target.w / 2, ty = l.target.y;
+  const sx = l.source.x + l.source.w * (l.source.s ?? 1) / 2, sy = l.source.y;
+  const tx = l.target.x - l.target.w * (l.target.s ?? 1) / 2, ty = l.target.y;
   const mx = (sx + tx) / 2;
   return `M${sx},${sy}C${mx},${sy} ${mx},${ty} ${tx},${ty}`;
 }
 
 function ticked() {
-  gN.selectAll('g.node').attr('transform', d => `translate(${d.x},${d.y})`);
-  gL.selectAll('path').attr('d', curve);
+  liveNodes().attr('transform', d => `translate(${d.x},${d.y})`);
+  liveLinks().attr('d', curve);
 }
 
 /* Zoom + kanvas titik tak hingga */
@@ -1270,16 +1380,27 @@ const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => applyZoom(e.transfo
 svg.call(zoom).on('dblclick.zoom', null);
 svg.on('click', e => { if (e.target === svgEl) select(null, { focus: false }); });
 
+/* Titik latar: pola di ruang layar, jarak 24·k dilipat per oktaf ke 16–44 px agar kerapatan stabil,
+   jari-jari tetap agar titik tetap tajam; offset dimodulo agar angka kecil saat pan jauh. */
+const gridPat = svgEl.querySelector('#dot-grid'), gridDot = gridPat.firstElementChild;
+let gridS = 24;
 function applyZoom(t) {
   T = t; K = t.k;
-  vp.attr('transform', t).style('--inv', (1 / K).toFixed(4));
+  vp.attr('transform', t);
   const z = K < 0.5 ? 'far' : K < 1.5 ? 'mid' : 'near';
   if (z !== zoomLevel) { zoomLevel = z; svgEl.dataset.zoom = z; }
   let s = 24 * K;
   while (s < 16) s *= 2;
   while (s > 44) s /= 2;
-  stageEl.style.backgroundSize = `${s}px ${s}px`;
-  stageEl.style.backgroundPosition = `${t.x}px ${t.y}px`;
+  if (s !== gridS) {
+    gridS = s;
+    gridPat.setAttribute('width', s);
+    gridPat.setAttribute('height', s);
+    gridDot.setAttribute('cx', s / 2);
+    gridDot.setAttribute('cy', s / 2);
+  }
+  gridPat.setAttribute('x', ((t.x % s) + s) % s);
+  gridPat.setAttribute('y', ((t.y % s) + s) % s);
 }
 function moveTo(t, ms = 600) {
   if (reduceMotion || !ms) svg.call(zoom.transform, t);
@@ -1296,6 +1417,18 @@ function freeRect() {
   const left = $('#side').getBoundingClientRect().right + 24;
   const right = $('#panel').hidden ? W - 32 : $('#panel').getBoundingClientRect().left - 24;
   return { x0: left, x1: right, y0: 40, y1: H - 40 };
+}
+/** Area pandang aktif (freeRect) diperlebar margin, dalam piksel layar. freeRect membaca layout,
+ *  jadi hitung sekali per batch lalu teruskan ke isInViewport. */
+function viewRect(margin = 64) {
+  const R = freeRect();
+  return { x0: R.x0 - margin, x1: R.x1 + margin, y0: R.y0 - margin, y1: R.y1 + margin };
+}
+/** Apakah kartu (pusat x/y dan w/h dalam koordinat dunia) beririsan dengan area pandang aktif.
+ *  Dipakai untuk membatasi animasi dekoratif (ripple, aliran garis) ke elemen yang benar-benar terlihat. */
+function isInViewport(n, R = viewRect()) {
+  const sx = T.x + K * n.x, sy = T.y + K * n.y, hw = K * (n.w || 0) / 2, hh = K * (n.h || 0) / 2;
+  return sx + hw >= R.x0 && sx - hw <= R.x1 && sy + hh >= R.y0 && sy - hh <= R.y1;
 }
 function fit(animate = true) {
   if (!simNodes.length) return;
@@ -1330,15 +1463,15 @@ function applyHighlight() {
     ancestors(focus).forEach(a => nb.add(a));
     if (byId.get(focus).kind === 'kat') subtree(focus).forEach(k => { nb.add(k); (D.mats.get(k) || []).forEach(m => nb.add(m)); });
   }
-  gN.selectAll('g.node')
+  liveNodes()
     .classed('faded', d => !!focus && !nb.has(d.id))
     .classed('hot', d => !!focus && nb.has(d.id))
     .classed('selected', d => d.id === selectedId);
-  gL.selectAll('path').classed('faded', l => !!focus && !(nb.has(idOf(l.source)) && nb.has(idOf(l.target))));
+  liveLinks().classed('faded', l => !!focus && !(nb.has(idOf(l.source)) && nb.has(idOf(l.target))));
 }
 
 function pulse(id) {
-  gN.selectAll('g.node').filter(d => d.id === id).classed('pulse', false).each(function () {
+  liveNodes().filter(d => d.id === id).classed('pulse', false).each(function () {
     void this.getBoundingClientRect();
     this.classList.add('pulse');
   });
@@ -2294,7 +2427,16 @@ async function boot() {
       refreshNow() { refresh(0.05); },
       clearAll() { kat = []; mat = []; src = []; pos.clear(); selectedId = null; layoutFresh(); },
       target() { return Object.fromEntries(treeLayout(visibleIds())); },
-      nodes() { return simNodes.map(n => ({ id: n.id, x: n.x, y: n.y, w: n.w, h: n.h, parent: parentOf(n.id) })); },
+      nodes() { return simNodes.map(n => ({ id: n.id, kind: n.kind, x: n.x, y: n.y, w: n.w, h: n.h, parent: parentOf(n.id) })); },
+      roots() { return D.roots.slice(); },
+      idByName(name) { return [...kat, ...mat].find(x => (x.nama ?? x.judul) === name)?.id ?? null; },
+      rename(id, name) { const k = kat.find(x => x.id === id), m = mat.find(x => x.id === id); if (k) k.nama = name; if (m) m.judul = name; refresh(0.05); },
+      addMat(kategoriId, judul) { mat.push({ id: uuid(), kategori_id: kategoriId, judul, catatan: null }); refresh(0.05); },
+      collapse,
+      fitNow() { fit(false); },
+      panTo(x, y, k) { svg.call(zoom.transform, d3.zoomIdentity.translate(x, y).scale(k)); },
+      inView(id) { const n = simNodes.find(d => d.id === id); return !!n && isInViewport(n); },
+      inViewIds() { const R = viewRect(); return simNodes.filter(n => isInViewport(n, R)).map(n => n.id); },
     });
     if (TESTFILES) Object.assign(window.__t, {
       files: memFiles,
