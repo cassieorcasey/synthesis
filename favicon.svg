@@ -1,1 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30"><g stroke="#8E8EA8" stroke-width="1.6"><line x1="15" y1="10" x2="7" y2="21"/><line x1="15" y1="10" x2="23" y2="21"/><line x1="15" y1="10" x2="15" y2="24"/></g><circle cx="15" cy="9.5" r="6.5" fill="#5856D6"/><circle cx="6.5" cy="21.5" r="3.6" fill="#30B0C7"/><circle cx="15" cy="24.5" r="3" fill="#FF9500"/><circle cx="23.5" cy="21.5" r="3.6" fill="#FF2D55"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+  <!-- Synthesis: Prisma Lapis & Pasak Inti. Grid 30, lempeng 14×6, pasak 6×28, celah 5 (16.7%), rx 1.75. -->
+  <style>
+    .s { fill: #1E293B; } .v { fill: #E05A2B; }
+    @media (prefers-color-scheme: dark) { .s { fill: #CBD5E1; } .v { fill: #FB7144; } }
+  </style>
+  <rect x="1" y="1" width="14" height="6" rx="1.75" class="s"/>
+  <rect x="4" y="12" width="14" height="6" rx="1.75" class="s"/>
+  <rect x="1" y="23" width="14" height="6" rx="1.75" class="s"/>
+  <rect x="23" y="1" width="6" height="28" rx="1.75" class="v"/>
+</svg>

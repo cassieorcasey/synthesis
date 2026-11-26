@@ -34,6 +34,8 @@
   --shadow: 0 12px 32px rgba(0, 0, 0, .07), 0 1px 2px rgba(0, 0, 0, .06);
   --scrim: rgba(18, 18, 30, .26);
   --edge: rgba(60, 60, 100, .30);
+  --brand-slate: #1E293B;      /* logo: tiga lempeng */
+  --brand-vermilion: #E05A2B;  /* logo: pasak inti */
   --accent: #007AFF;
   --on-accent: #FFFFFF;
   --danger: #D70015;
@@ -64,6 +66,7 @@
     --field: rgba(255, 255, 255, .06);
     --shadow: 0 14px 44px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4);
     --scrim: rgba(0, 0, 0, .45); --edge: rgba(220, 220, 255, .24);
+    --brand-slate: #CBD5E1; --brand-vermilion: #FB7144;
     --accent: #0A84FF; --danger: #FF453A;
     --c-pink: #FF375F; --c-orange: #FF9F0A; --c-yellow: #FFD60A; --c-green: #30D158;
     --c-teal: #40C8E0; --c-blue: #0A84FF; --c-indigo: #5E5CE6; --c-purple: #BF5AF2; --c-none: #98989D;
@@ -78,6 +81,7 @@
   --field: rgba(255, 255, 255, .06);
   --shadow: 0 14px 44px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4);
   --scrim: rgba(0, 0, 0, .45); --edge: rgba(220, 220, 255, .24);
+  --brand-slate: #CBD5E1; --brand-vermilion: #FB7144;
   --accent: #0A84FF; --danger: #FF453A;
   --c-pink: #FF375F; --c-orange: #FF9F0A; --c-yellow: #FFD60A; --c-green: #30D158;
   --c-teal: #40C8E0; --c-blue: #0A84FF; --c-indigo: #5E5CE6; --c-purple: #BF5AF2; --c-none: #98989D;
@@ -492,13 +496,10 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
 <aside class="side glass" id="side" aria-label="Navigasi">
   <div class="side-head">
     <svg class="logo" width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
-      <line x1="15" y1="10" x2="7" y2="21" stroke="var(--edge)" stroke-width="1.6"></line>
-      <line x1="15" y1="10" x2="23" y2="21" stroke="var(--edge)" stroke-width="1.6"></line>
-      <line x1="15" y1="10" x2="15" y2="24" stroke="var(--edge)" stroke-width="1.6"></line>
-      <circle cx="15" cy="9.5" r="6.5" fill="var(--c-indigo)"></circle>
-      <circle cx="6.5" cy="21.5" r="3.6" fill="var(--c-teal)"></circle>
-      <circle cx="15" cy="24.5" r="3" fill="var(--c-orange)"></circle>
-      <circle cx="23.5" cy="21.5" r="3.6" fill="var(--c-pink)"></circle>
+      <rect x="1" y="1" width="14" height="6" rx="1.75" fill="var(--brand-slate)"/>
+      <rect x="4" y="12" width="14" height="6" rx="1.75" fill="var(--brand-slate)"/>
+      <rect x="1" y="23" width="14" height="6" rx="1.75" fill="var(--brand-slate)"/>
+      <rect x="23" y="1" width="6" height="28" rx="1.75" fill="var(--brand-vermilion)"/>
     </svg>
     <h1>Synthesis</h1>
     <div class="add-wrap">
