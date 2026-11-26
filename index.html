@@ -166,8 +166,20 @@ button { cursor: pointer; }
 @keyframes pulse { 50% { stroke-width: 6; } }
 
 /* Fokus: cabang yang disorot tetap penuh, sisanya meredup */
-#map.focusing .node.faded, #map.focusing .link.faded { opacity: .35; }
+/* Fokus kognitif 3 lapis, hanya saat ada simpul terpilih (tanpa blur). Skala selalu di .body (transform-box: fill-box,
+   origin center), karena posisi simpul ada di atribut transform g.node yang akan tertimpa transform CSS. */
+.node, .link { transition: opacity var(--dur-med) var(--ease-spring); }
+.node .body { transition: transform var(--dur-med) var(--ease-spring); }
+#map.focusing .node.in-lineage .body { transform: scale(1.02); }
+#map.focusing .node.in-lineage .shape { filter: drop-shadow(0 6px 14px rgba(30, 30, 70, .14)); }
+#map.focusing .node.is-sibling, #map.focusing .link.is-sibling { opacity: .62; }
+#map.focusing .node.is-distant, #map.focusing .link.is-distant { opacity: .26; }
+#map.focusing .node.is-distant .body { transform: scale(.96); }
+#map.focusing .node.is-distant.hot { opacity: .62; }   /* hover di cabang jauh: pratinjau jalur, bukan fokus */
 #map.hovering .node.hot .body { transform: scale(1.02); }
+/* Aliran arah di jalur akar → terpilih: dua putaran lalu kembali garis utuh */
+.link.flow { animation: flow calc(var(--dur-flow) * 1.6) linear 2; }
+@keyframes flow { from { stroke-dasharray: 7 9; stroke-dashoffset: 32; } to { stroke-dasharray: 7 9; stroke-dashoffset: 0; } }
 
 /* semantic zoom: dari jauh chip materi bermorfosis jadi titik konstelasi (geometri lewat JS), label memudar ke kiri;
    kategori tetap kartu sebagai jangkar. Lingkaran .hit menjaga hitbox tetap saat titik mekar atau menyusut. */
@@ -311,6 +323,15 @@ button { cursor: pointer; }
   animation: slide .32s cubic-bezier(.2, .9, .3, 1.08);
 }
 @keyframes slide { from { transform: translateX(24px); opacity: .3; } }
+/* Tutup: mainkan keluar dulu, baru hidden (lihat closePanel) */
+.panel.closing { animation: panel-out var(--dur-fast) var(--ease-out-expo) forwards; pointer-events: none; }
+@keyframes panel-out { to { transform: translateX(24px); opacity: 0; } }
+/* Arah isi panel mengikuti hierarki: turun masuk dari kanan, naik dari kiri, lompat cabang memudar */
+.panel-body.enter-down { --pb-dx: 14px; animation: pb-in var(--dur-med) var(--ease-out-expo); }
+.panel-body.enter-up { --pb-dx: -14px; animation: pb-in var(--dur-med) var(--ease-out-expo); }
+.panel-body.enter-fade { animation: pb-fade var(--dur-med) var(--ease-out-expo); }
+@keyframes pb-in { from { transform: translateX(var(--pb-dx)); opacity: 0; } }
+@keyframes pb-fade { from { opacity: 0; } }
 .panel-top {
   position: sticky; top: 0; z-index: 2; display: flex; justify-content: flex-end; gap: 8px;
   padding: 12px 12px 0; pointer-events: none;
@@ -402,6 +423,28 @@ a.txt:hover .t { text-decoration: underline; text-underline-offset: 2px; }
 /* form sumber di dalam panel */
 .grp { display: flex; flex-direction: column; gap: 10px; }
 .grp + .grp { margin-top: 6px; }
+/* Study-Flow Stepper: pita tahap kelompok sumber, menempel di atas daftar saat panel digulir */
+.flow {
+  --pb-x: 24px; position: sticky; top: 0; z-index: 1; margin: 0 calc(-1 * var(--pb-x)); padding: 10px 56px 10px var(--pb-x);
+  background: var(--glass-solid); box-shadow: 0 1px 0 var(--hair);
+}
+.flow ol { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; overflow-x: auto; scrollbar-width: none; }
+.flow ol::-webkit-scrollbar { display: none; }
+.flow ol.fade-l { -webkit-mask-image: linear-gradient(90deg, transparent, #000 22px); mask-image: linear-gradient(90deg, transparent, #000 22px); }
+.flow ol.fade-r { -webkit-mask-image: linear-gradient(270deg, transparent, #000 22px); mask-image: linear-gradient(270deg, transparent, #000 22px); }
+.flow ol.fade-l.fade-r { -webkit-mask-image: linear-gradient(90deg, transparent, #000 22px, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(90deg, transparent, #000 22px, #000 calc(100% - 22px), transparent); }
+.flow li { flex: none; display: flex; align-items: center; gap: 6px; }
+.flow li + li::before { content: ""; width: 10px; height: 1px; background: var(--hair); }
+.flow button {
+  display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px 0 5px; border: 0; border-radius: 15px;
+  background: var(--fill); color: var(--fg-2); font: 600 12.5px/1 var(--font-ui); white-space: nowrap;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.flow button .i { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--card); color: var(--fg-2); font: 700 11px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
+.flow button:hover { background: var(--fill-2); color: var(--fg); }
+.flow button[aria-current="step"] { background: var(--fg); color: var(--bg); }
+.flow button[aria-current="step"] .i { background: var(--bg); color: var(--fg); }
+.src.playing iframe { animation: pb-fade var(--dur-med) var(--ease-out-expo); }
 .grp-h { display: flex; align-items: center; gap: 8px; margin: 0; }
 .grp-h h4 { margin: 0; font: 600 17px/1.25 var(--font-serif); flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .grp-h h4.none { font: 600 13px/1.2 var(--font-ui); color: var(--fg-3); }
@@ -501,6 +544,12 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
     animation-name: rise;
   }
   @keyframes rise { from { transform: translateY(30px); opacity: .3; } }
+  .panel.closing { animation-name: panel-out-down; }
+  @keyframes panel-out-down { to { transform: translateY(30px); opacity: 0; } }
+  .flow { --pb-x: 18px; }
+  /* layar kecil sering dibaca di luar ruangan: lapisan konteks tidak terlalu pudar */
+  #map.focusing .node.is-sibling, #map.focusing .link.is-sibling { opacity: .72; }
+  #map.focusing .node.is-distant, #map.focusing .link.is-distant { opacity: .42; }
   .panel-body { padding: 0 18px 20px; }
   .panel h2 { font-size: 26px; }
   .empty { left: 50%; }
@@ -1244,7 +1293,7 @@ function draw() {
 
   revive(ls);
   ls.enter().append('path').merge(ls)
-    .attr('class', d => `link ${d.type}`)
+    .each(function (d) { const c = this.classList; c.add('link'); c.toggle('kk', d.type === 'kk'); c.toggle('km', d.type === 'km'); })
     .style('--cc', d => lineColor(D.color.get(idOf(d.target))));
 
   revive(ns);
@@ -1643,8 +1692,8 @@ function hidePeek(now = false) {
 
 /** Kurva Bézier dari tepi kanan induk ke tepi kiri anak (anak yang sedang keluar ikut menyusut, s < 1). */
 function curve(l) {
-  const sx = l.source.x + (l.source.vw ?? l.source.w) * (l.source.s ?? 1) / 2, sy = l.source.y;
-  const tx = l.target.x - (l.target.vw ?? l.target.w) * (l.target.s ?? 1) / 2, ty = l.target.y;
+  const sx = l.source.x + (l.source.vw ?? l.source.w) * (l.source.s ?? 1) * (l.source.dof ?? 1) / 2, sy = l.source.y;
+  const tx = l.target.x - (l.target.vw ?? l.target.w) * (l.target.s ?? 1) * (l.target.dof ?? 1) / 2, ty = l.target.y;
   const mx = (sx + tx) / 2;
   return `M${sx},${sy}C${mx},${sy} ${mx},${ty} ${tx},${ty}`;
 }
@@ -1686,21 +1735,36 @@ function applyZoom(t) {
   gridPat.setAttribute('x', ((t.x % s) + s) % s);
   gridPat.setAttribute('y', ((t.y % s) + s) % s);
 }
-function moveTo(t, ms = 600) {
-  if (reduceMotion || !ms) svg.call(zoom.transform, t);
-  else svg.transition().duration(ms).ease(d3.easeCubicOut).call(zoom.transform, t);
+/** Kamera ke transform t. Transisi d3-zoom (interpolateZoom); gestur pengguna (wheel, seret, sentuh) memanggil
+ *  interrupt() pada svg sehingga transisi ini berhenti di tempat. Mengembalikan transisi, atau null bila instan. */
+let camMoving = false;
+function moveTo(t, ms = 600, ease = d3.easeCubicOut) {
+  if (reduceMotion || !ms) { svg.interrupt(); svg.call(zoom.transform, t); camMoving = false; return null; }
+  camMoving = true;
+  return svg.transition().duration(ms).ease(ease).call(zoom.transform, t)
+    .on('end interrupt', () => { camMoving = false; });
+}
+let userGesture = false;
+zoom.on('start.user', e => { if (e.sourceEvent) userGesture = true; })
+  .on('end.user', e => { if (e.sourceEvent) userGesture = false; });
+/** Kotak panel tanpa transform animasinya (slide/rise), supaya ukuran area bebas benar sejak panel mulai muncul. */
+function panelBox() {
+  const el = $('#panel');
+  if (el.hidden || el.classList.contains('closing')) return null;
+  const r = el.getBoundingClientRect(), tf = getComputedStyle(el).transform;
+  const m = tf && tf !== 'none' ? new DOMMatrixReadOnly(tf) : { m41: 0, m42: 0 };
+  return { left: r.left - m.m41, top: r.top - m.m42 };
 }
 /** Area kanvas yang tidak tertutup sidebar dan panel. */
 function freeRect() {
   const W = svgEl.clientWidth, H = svgEl.clientHeight;
+  const pb = panelBox();
   if (isPhone()) {
     const top = ($('#side').getBoundingClientRect().bottom || 80) + 12;
-    const panelOpen = !$('#panel').hidden;
-    return { x0: 16, x1: W - 16, y0: top, y1: panelOpen ? H * 0.34 : H - 120 };
+    return { x0: 16, x1: W - 16, y0: top, y1: pb ? Math.max(top + 80, pb.top - 16) : H - 120 };   // di atas bottom sheet
   }
   const left = $('#side').getBoundingClientRect().right + 24;
-  const right = $('#panel').hidden ? W - 32 : $('#panel').getBoundingClientRect().left - 24;
-  return { x0: left, x1: right, y0: 40, y1: H - 40 };
+  return { x0: left, x1: pb ? pb.left - 24 : W - 32, y0: 40, y1: H - 40 };
 }
 /** Area pandang aktif (freeRect) diperlebar margin, dalam piksel layar. freeRect membaca layout,
  *  jadi hitung sekali per batch lalu teruskan ke isInViewport. */
@@ -1730,28 +1794,63 @@ function fit(animate = true) {
 function focusNode(id) {
   const d = pos.get(id);
   if (!d) return;
+  if (userGesture) return;   // pengguna sedang menggeser/zoom: jangan rebut kamera
   const R = freeRect();
   const px = d.tx ?? d.x, py = d.ty ?? d.y;
   const k = Math.max(K, byId.get(id).kind === 'mat' ? 1.5 : 1.0);
-  moveTo(d3.zoomIdentity.translate((R.x0 + R.x1) / 2 - k * px, (R.y0 + R.y1) / 2 - k * py).scale(k), 560);
+  // pusat area bebas (bukan pusat layar): kompensasi sidebar kiri, panel kanan, atau bottom sheet di ponsel
+  const cx = (R.x0 + R.x1) / 2, cy = (R.y0 + R.y1) / 2;
+  const { ms, ease } = motion('--dur-flow', '--ease-out-expo');
+  const tr = moveTo(d3.zoomIdentity.translate(cx - k * px, cy - k * py).scale(k), ms * 1.1, ease);
+  if (tr) tr.on('end.flow interrupt.flow', startFlow); else startFlow();
 }
 
 /** Sorot simpul fokus, leluhurnya, dan anak langsungnya; yang lain diredupkan. */
+/** Lapisan fokus untuk simpul terpilih id.
+ *  lineage: id + semua leluhurnya; bila id kategori, juga seluruh isi cabangnya (subkategori dan materi).
+ *  sibs: simpul lain dengan induk yang sama dengan id (untuk akar: akar lain), di luar lineage.
+ *  Selebihnya jauh. Hanya simpul yang tampil yang diberi kelas. */
+function focusLayers(id) {
+  const lineage = new Set([id, ...ancestors(id)]);
+  if (byId.get(id).kind === 'kat') for (const k of subtree(id)) { lineage.add(k); (D.mats.get(k) || []).forEach(m => lineage.add(m)); }
+  const p = parentOf(id);
+  const sibs = new Set((p ? [...D.kids.get(p), ...D.mats.get(p)] : D.roots).filter(x => !lineage.has(x)));
+  return { lineage, sibs };
+}
+/** Fokus kognitif 3 lapis hanya mengikuti seleksi; hover cukup mengangkat simpul dan leluhurnya (.hot) tanpa
+ *  meredupkan apa pun, supaya peta tidak berkedip mengikuti mouse. */
 function applyHighlight() {
-  const focus = hoverId || selectedId;
-  svgEl.classList.toggle('focusing', !!focus);
+  const sel = selectedId && byId.has(selectedId) ? selectedId : null;
+  svgEl.classList.toggle('focusing', !!sel);
   svgEl.classList.toggle('hovering', !!hoverId);
-  const nb = new Set();
-  if (focus && byId.has(focus)) {
-    nb.add(focus);
-    ancestors(focus).forEach(a => nb.add(a));
-    if (byId.get(focus).kind === 'kat') subtree(focus).forEach(k => { nb.add(k); (D.mats.get(k) || []).forEach(m => nb.add(m)); });
-  }
-  liveNodes()
-    .classed('faded', d => !!focus && !nb.has(d.id))
-    .classed('hot', d => !!focus && nb.has(d.id))
-    .classed('selected', d => d.id === selectedId);
-  liveLinks().classed('faded', l => !!focus && !(nb.has(idOf(l.source)) && nb.has(idOf(l.target))));
+  const hot = new Set(hoverId && byId.has(hoverId) ? [hoverId, ...ancestors(hoverId)] : []);
+  const { lineage, sibs } = sel ? focusLayers(sel) : { lineage: new Set(), sibs: new Set() };
+  const layer = id => (!sel ? null : lineage.has(id) ? 'L' : sibs.has(id) ? 'S' : 'D');
+  let moved = false;
+  liveNodes().each(function (d) {
+    const l = layer(d.id), c = this.classList;
+    c.toggle('in-lineage', l === 'L'); c.toggle('is-sibling', l === 'S'); c.toggle('is-distant', l === 'D');
+    c.toggle('hot', hot.has(d.id));
+    c.toggle('selected', d.id === sel);
+    const dof = l === 'L' ? 1.02 : l === 'D' ? 0.96 : 1;   // ujung garis ikut skala kartu
+    if ((d.dof ?? 1) !== dof) { d.dof = dof; moved = true; }
+  });
+  liveLinks().each(function (lk) {
+    const s = idOf(lk.source), t = idOf(lk.target);
+    const l = !sel ? null : lineage.has(s) && lineage.has(t) ? 'L' : sibs.has(t) ? 'S' : 'D';
+    const c = this.classList;
+    c.toggle('in-lineage', l === 'L'); c.toggle('is-sibling', l === 'S'); c.toggle('is-distant', l === 'D');
+    if (!sel) c.remove('flow');
+  });
+  if (moved) liveLinks().attr('d', curve);
+}
+/** Aliran arah pada garis akar → terpilih, hanya garis yang terlihat di area bebas; diputar ulang tiap seleksi. */
+function startFlow() {
+  const links = liveLinks().classed('flow', false);
+  if (!selectedId || !byId.has(selectedId)) return;
+  const path = new Set([selectedId, ...ancestors(selectedId)]), R = viewRect(0);
+  links.filter(l => path.has(idOf(l.source)) && path.has(idOf(l.target)) && (isInViewport(l.source, R) || isInViewport(l.target, R)))
+    .each(function () { void this.getBoundingClientRect(); this.classList.add('flow'); });
 }
 
 function pulse(id) {
@@ -1786,6 +1885,7 @@ function select(id, { focus = true } = {}) {
   applyHighlight();
   syncForms();
   if (selectedId && focus) setTimeout(() => focusNode(selectedId), reduceMotion ? 0 : 60);
+  else startFlow();
 }
 
 /* ───────────── Sidebar: kerangka cabang & pencarian ───────────── */
@@ -2049,8 +2149,9 @@ function materiPanel(n) {
   }
   const grouped = groups.some(g => g.key);
   const addBtn = label => `<button type="button" class="mini" data-act="src-add" data-kelompok="${esc(label || '')}" aria-label="Tambah sumber ke ${esc(label || 'tanpa kelompok')}">${plus}Tambah</button>`;
+  const steps = groups.filter(g => g.key);
   const body = grouped
-    ? groups.map(g => `<div class="grp">
+    ? groups.map(g => `<div class="grp"${g.key ? ` data-step="${steps.indexOf(g)}"` : ''}>
         <div class="grp-h"><h4 class="${g.key ? '' : 'none'}">${g.key ? esc(g.label) : 'Tanpa kelompok'}</h4><span class="n">${g.items.length}</span>${adding ? '' : addBtn(g.label)}</div>
         ${g.items.map(card).join('')}</div>`).join('')
     : list.map(card).join('');
@@ -2064,6 +2165,7 @@ function materiPanel(n) {
       ${n.catatan ? `<p class="prose">${esc(n.catatan)}</p>` : ''}
       <section class="sec">
         <div class="sec-h"><h3>Sumber belajar</h3><span class="n">${list.length || ''}</span></div>
+        ${steps.length >= 2 ? `<nav class="flow" aria-label="Alur belajar"><ol>${steps.map((g, i) => `<li><button type="button" data-act="flow-step" data-step="${i}"${i ? '' : ' aria-current="step"'}><span class="i">${i + 1}</span>${esc(g.label)}</button></li>`).join('')}</ol></nav>` : ''}
         ${body}
         ${adding ? srcFormHTML(null) : `<button type="button" class="btn" data-act="src-add">${plus}Tambah sumber</button>`}
         ${!list.length && !adding ? '<p class="hint">Belum ada sumber. Tempel link YouTube, artikel, atau PDF dari Drive. Beri kelompok seperti Penjelasan atau Latihan soal kalau sumbernya banyak.</p>' : ''}
@@ -2106,17 +2208,154 @@ function kategoriPanel(n) {
     </div>`;
 }
 
+/* ───────────── Study-Flow Stepper ───────────── */
+let flowLock = null;
+/** Tandai tahap aktif: tahap terakhir yang kepalanya sudah melewati tepi bawah stepper. */
+function syncFlow(force) {
+  const nav = panelEl.querySelector('nav.flow');
+  if (!nav) return;
+  let cur = force;
+  if (cur == null) {
+    const line = nav.getBoundingClientRect().bottom + 6;
+    cur = 0;
+    for (const g of panelEl.querySelectorAll('.grp[data-step]')) if (g.getBoundingClientRect().top <= line) cur = +g.dataset.step;
+    if (panelEl.scrollTop + panelEl.clientHeight >= panelEl.scrollHeight - 2) {   // dasar daftar: tahap terakhir yang terlihat
+      const seen = [...panelEl.querySelectorAll('.grp[data-step]')].filter(g => g.getBoundingClientRect().top < panelEl.getBoundingClientRect().bottom);
+      if (seen.length) cur = Math.max(cur, +seen[seen.length - 1].dataset.step);
+    }
+  }
+  nav.querySelectorAll('button').forEach(b => {
+    const on = +b.dataset.step === cur;
+    if (on) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    if (on) {   // gulir pita hanya bila tombol aktif terpotong
+      const ol = b.closest('ol'), li = b.parentElement, l = li.offsetLeft - ol.offsetLeft, r = l + li.offsetWidth;
+      if (l < ol.scrollLeft) ol.scrollLeft = l;
+      else if (r > ol.scrollLeft + ol.clientWidth) ol.scrollLeft = r - ol.clientWidth;
+    }
+  });
+  flowEdges(nav.querySelector('ol'));
+}
+/** Tepi pita memudar di sisi yang masih punya tahap tersembunyi, tanda pita bisa digeser. */
+function flowEdges(ol) {
+  ol.classList.toggle('fade-l', ol.scrollLeft > 1);
+  ol.classList.toggle('fade-r', ol.scrollLeft + ol.clientWidth < ol.scrollWidth - 1);
+  if (!ol.__edges) { ol.__edges = true; ol.addEventListener('scroll', () => flowEdges(ol), { passive: true }); }
+}
+/** Gulir panel (bukan kanvas) ke kelompok tahap i, tepat di bawah stepper yang menempel. */
+function flowTo(i) {
+  const nav = panelEl.querySelector('nav.flow'), g = panelEl.querySelector(`.grp[data-step="${i}"]`);
+  if (!nav || !g) return;
+  const top = panelEl.scrollTop + g.getBoundingClientRect().top - nav.getBoundingClientRect().bottom - 10;
+  syncFlow(i);
+  flowLock = i;
+  const unlock = () => { flowLock = null; panelEl.removeEventListener('scrollend', unlock); };
+  panelEl.addEventListener('scrollend', unlock);
+  setTimeout(unlock, 900);
+  panelEl.scrollTo({ top: Math.max(0, top), behavior: motion().ms ? 'smooth' : 'auto' });
+}
+let flowRaf = 0;
+panelEl.addEventListener('scroll', () => {
+  if (flowLock != null || flowRaf) return;
+  flowRaf = requestAnimationFrame(() => { flowRaf = 0; syncFlow(); });
+}, { passive: true });
+
+/* ───────────── FLIP kartu sumber (Baca / Putar) ───────────── */
+function replaceCard(el, html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  const next = t.content.firstElementChild;
+  el.replaceWith(next);
+  return next;
+}
+/** First: catat posisi semua blok setelah kartu dan tinggi kartu. Last: jalankan mutate() (tambal kartu saja).
+ *  Invert: blok di bawah digeser balik ke posisi lama (translateY); kartu yang membesar dipotong clip-path ke tinggi lama.
+ *  Play: transform dan clip-path dilepas dengan transisi, jadi kartu di bawah turun/naik halus. Semua gaya inline
+ *  dibersihkan saat transitionend atau timer cadangan, sehingga layout kembali responsif. Tidak ada elemen yang
+ *  dipindah, jadi iframe tidak dimuat ulang. */
+let flipDone = null;
+function flipSrc(card, mutate) {
+  flipDone?.();
+  const { ms } = motion('--dur-med');
+  const body = card.closest('.panel-body');
+  if (!ms || !body) return mutate();
+  const followers = [];
+  for (let e = card; e && e !== body; e = e.parentElement)
+    for (let x = e.nextElementSibling; x; x = x.nextElementSibling) if (x.tagName !== 'DATALIST') followers.push(x);
+  const top0 = followers.map(f => f.getBoundingClientRect().top), h0 = card.getBoundingClientRect().height;
+  const next = mutate() || card;
+  const h1 = next.getBoundingClientRect().height;
+  const dys = followers.map((f, i) => top0[i] - f.getBoundingClientRect().top);
+  const moving = followers.filter((f, i) => Math.abs(dys[i]) > 0.5);
+  const grow = h1 - h0 > 0.5;
+  if (!moving.length && !grow) return next;
+  const all = [next, ...moving];
+  const clean = () => {
+    clearTimeout(timer);
+    for (const e of all) for (const k of ['transform', 'transition', 'clip-path', 'will-change']) e.style.removeProperty(k);
+    lead.removeEventListener('transitionend', onEnd);
+    if (flipDone === clean) flipDone = null;
+  };
+  const onEnd = e => { if (e.target === lead) clean(); };
+  const lead = grow ? next : moving[moving.length - 1];
+  for (const e of all) e.style.transition = 'none';
+  if (grow) next.style.clipPath = `inset(0 0 ${h1 - h0}px 0 round 16px)`;
+  followers.forEach((f, i) => { if (Math.abs(dys[i]) > 0.5) { f.style.transform = `translateY(${dys[i]}px)`; f.style.willChange = 'transform'; } });
+  void next.offsetWidth;
+  const tr = `${ms}ms var(--ease-out-expo)`;
+  if (grow) { next.style.transition = `clip-path ${tr}`; next.style.clipPath = 'inset(0 0 0 0 round 16px)'; }
+  for (const f of moving) { f.style.transition = `transform ${tr}`; f.style.transform = 'translateY(0)'; }
+  lead.addEventListener('transitionend', onEnd);
+  const timer = setTimeout(clean, ms + 120);
+  flipDone = clean;
+  return next;
+}
+
+/* Buka/tutup panel. Menutup memainkan animasi keluar dulu, lalu hidden; membuka lagi di tengah animasi itu
+   membatalkannya (timer + kelas dibersihkan) dan memutar ulang animasi masuk panel. */
+let closeTimer = null;
+const isClosing = () => panelEl.classList.contains('closing');
+function finishClose() {
+  clearTimeout(closeTimer); closeTimer = null;
+  panelEl.classList.remove('closing');
+  panelEl.hidden = true; panelEl.innerHTML = ''; delete panelEl.dataset.id;
+}
+function closePanel() {
+  if (panelEl.hidden) { panelEl.innerHTML = ''; return; }
+  if (isClosing()) return;
+  flipDone?.();
+  const { ms } = motion('--dur-fast');
+  if (!ms) return finishClose();
+  panelEl.classList.add('closing');
+  closeTimer = setTimeout(finishClose, ms + 150);   // cadangan bila animationend tidak datang
+}
+panelEl.addEventListener('animationend', e => { if (e.target === panelEl && isClosing()) finishClose(); });
+
+/** Arah perpindahan isi panel: 'down' bila simpul baru keturunan yang lama, 'up' bila leluhurnya, selain itu 'fade'. */
+function panelDir(prev, next) {
+  if (!prev || prev === next || !byId.has(prev)) return null;
+  if (ancestors(next).includes(prev)) return 'down';
+  if (ancestors(prev).includes(next)) return 'up';
+  return 'fade';
+}
+
 function renderPanel() {
   const n = selectedId && byId.get(selectedId);
   document.body.classList.toggle('panel-open', !!n);
-  if (!n) { panelEl.hidden = true; panelEl.innerHTML = ''; return; }
-  const wasOpen = !panelEl.hidden, same = panelEl.dataset.id === n.id, scroll = panelEl.scrollTop;
+  if (!n) return closePanel();
+  const reopening = isClosing();
+  if (reopening) { clearTimeout(closeTimer); closeTimer = null; panelEl.classList.remove('closing'); }
+  flipDone?.();
+  const wasOpen = !panelEl.hidden && !reopening, same = wasOpen && panelEl.dataset.id === n.id, scroll = panelEl.scrollTop;
+  const dir = wasOpen ? panelDir(panelEl.dataset.id, n.id) : null;
   panelEl.dataset.id = n.id;
   panelEl.innerHTML = `<div class="panel-top"><button type="button" class="icon-btn" data-act="close" aria-label="Tutup panel">${xIcon}</button></div>`
     + (n.kind === 'mat' ? materiPanel(n) : kategoriPanel(n));
   panelEl.querySelectorAll('.ico img').forEach(img => img.addEventListener('error', () => { img.replaceWith(document.createRange().createContextualFragment(kindIcon.web)); }));
   panelEl.hidden = false;
+  if (reopening) { panelEl.style.animation = 'none'; void panelEl.offsetWidth; panelEl.style.animation = ''; }
+  if (dir && motion().ms) panelEl.querySelector('.panel-body')?.classList.add('enter-' + dir);
   if (wasOpen && same) panelEl.scrollTop = scroll; else panelEl.scrollTop = 0;
+  syncFlow();
   if (srcFocus) {
     const el = panelEl.querySelector(`[data-src-id="${srcFocus}"]`);
     srcFocus = null;
@@ -2242,21 +2481,35 @@ panelEl.addEventListener('click', async e => {
     if (act === 'add-sub') return openKatForm(null, { parentId: n.id });
     if (act === 'edit') return n.kind === 'mat' ? openMatForm(n.id) : openKatForm(n.id);
     if (act === 'split') return openSplit(n.id);
-    if (act === 'play') { playing.add(b.dataset.id); return renderPanel(); }
+    if (act === 'play') {
+      // tambal kartu ini saja: panel tidak dirender ulang, iframe dibuat sekali dan tidak pernah dipindah
+      const s = src.find(x => x.id === b.dataset.id), card = b.closest('article.src');
+      playing.add(b.dataset.id);
+      if (!s || !card) return renderPanel();
+      return flipSrc(card, () => {
+        const t = document.createElement('template');
+        t.innerHTML = srcCard(s);
+        b.replaceWith(t.content.querySelector('iframe'));
+        card.classList.add('playing');
+        return card;
+      });
+    }
+    if (act === 'flow-step') return flowTo(+b.dataset.step);
     if (act === 'read' || act === 'open-file' || act === 'download-file') {
       const s = src.find(x => x.id === b.dataset.id);
       if (!s) return;
       if (act === 'open-file') return openFile(s);
       if (act === 'download-file') return downloadFile(s);
-      if (reading.has(s.id)) { reading.delete(s.id); return renderPanel(); }
+      // ganti kartu itu saja (FLIP): panel lain, iframe yang diputar, atau form yang sedang diisi tidak ikut di-render ulang
+      const cardOf = () => panelEl.querySelector(`article.src[data-src-id="${s.id}"]`);
+      const swap = () => { const el = cardOf(); return el && flipSrc(el, () => replaceCard(el, fileCard(s))); };
+      if (reading.has(s.id)) { reading.delete(s.id); return swap(); }
       reading.add(s.id);
       const fresh = !readerCache.has(s.id) || readerCache.get(s.id) === 'error';
-      renderPanel();
+      swap();
       if (fresh) {
         await loadNote(s);
-        // ganti kartu itu saja: panel lain atau form yang sedang diisi tidak ikut di-render ulang
-        const el = panelEl.querySelector(`article.src[data-src-id="${s.id}"]`);
-        if (el && reading.has(s.id)) el.outerHTML = fileCard(s);
+        if (reading.has(s.id)) swap();
       }
       return;
     }
@@ -2726,6 +2979,9 @@ async function boot() {
       rename(id, name) { const k = kat.find(x => x.id === id), m = mat.find(x => x.id === id); if (k) k.nama = name; if (m) m.judul = name; refresh(0.05); },
       addMat(kategoriId, judul) { mat.push({ id: uuid(), kategori_id: kategoriId, judul, catatan: null }); refresh(0.05); },
       collapse,
+      select(id, focus = true) { select(id, { focus }); },
+      camMoving: () => camMoving,
+      freeRect,
       ripples: rippleLog,
       ancestorsOf: ancestors,
       srcIds(materiId) { return src.filter(x => x.materi_id === materiId).map(x => x.id); },
