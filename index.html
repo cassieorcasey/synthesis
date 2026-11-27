@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#F5F5F7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0C0D12" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -299,7 +299,8 @@ button { cursor: pointer; }
 .zoombar button + button { border-top: 1px solid var(--hair); }
 .zoombar button:hover { background: var(--fill); }
 .zoombar svg { width: 18px; height: 18px; }
-.mob-actions { display: none; }
+/* Khusus ponsel (dock pencarian & bottom sheet): tidak tampil di desktop */
+.grab, .dock-add, .add-row { display: none; }
 
 .toast {
   position: fixed; left: 50%; bottom: calc(var(--bottom) + 8px); transform: translateX(-50%);
@@ -518,47 +519,124 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
 .sheet h2 { margin: 0; font: 600 21px/1.2 var(--font-serif); }
 .fields { padding: 18px 20px 22px; display: flex; flex-direction: column; gap: 16px; }
 
-/* ── HP ── */
+/* ── Ponsel: satu tangan ──
+   Semua kontrol utama tinggal di sepertiga bawah. Indeks (cari + daftar peta) adalah dock yang tumbuh jadi bottom sheet;
+   panel detail adalah bottom sheet bersnap (judul / separuh / penuh). Posisi sheet hanya lewat transform (diatur JS,
+   lihat makeSheet), tinggi memakai dvh supaya bilah browser dan keyboard (--kb) tidak memotong isi. */
 @media (max-width: 760px) {
-  .side { bottom: auto; right: var(--gutter-r); width: auto; max-height: calc(100% - var(--top) - var(--bottom)); }
-  .side-head { padding: 10px 10px 8px 14px; }
-  .side-head h1 { font-size: 19px; }
-  .side-head .menu-btn { display: grid; }
+  :root { --sheet-top: calc(env(safe-area-inset-top, 0px) + 8px); --safe-b: env(safe-area-inset-bottom, 0px); }
+  html, body { height: 100dvh; overscroll-behavior: none; }
+
+  /* indeks: dock di bawah ibu jari */
+  .side {
+    top: var(--sheet-top); left: 0; right: 0; bottom: var(--kb, 0px); width: auto;
+    border-radius: var(--r-lg) var(--r-lg) 0 0; border-bottom: 0;
+    display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas: "grab grab" "menu search" "logo title" "body body";
+    padding-bottom: var(--safe-b);
+    background: var(--card); -webkit-backdrop-filter: none; backdrop-filter: none;   /* tanpa blur (jank di ponsel menengah), jadi latarnya solid */
+    transform: translate3d(0, calc(100% - var(--dock-h, 96px)), 0);   /* posisi dock sebelum JS mengambil alih */
+  }
+  .grab { grid-area: grab; display: block; height: 18px; touch-action: none; cursor: grab; }
+  .grab::before, .panel-top::before {
+    content: ""; display: block; width: 38px; height: 5px; margin: 7px auto 0; border-radius: 3px; background: var(--fill-2);
+  }
+  .side-head { display: contents; }
+  .side-head .menu-btn { grid-area: menu; display: grid; width: 44px; height: 44px; margin: 0 0 12px 12px; align-self: start; }
+  .side-head svg.logo { grid-area: logo; width: 24px; height: 24px; margin: 6px 0 6px 22px; align-self: center; }
+  .side-head h1 { grid-area: title; font-size: 18px; margin: 6px 0 6px 6px; align-self: center; }
   .add-wrap { display: none; }
-  .search { padding-bottom: 10px; }
+  .search { grid-area: search; display: flex; align-items: flex-start; gap: 8px; padding: 0 12px 12px 8px; touch-action: none; }
+  .search svg { left: 20px; margin-top: -6px; }
+  .search input { flex: 1; min-width: 0; height: 44px; font-size: 16px; padding: 0 14px 0 34px; }   /* 16px: iOS tidak auto-zoom */
   .search .kbd { display: none; }
-  .side-body { display: none; }
-  .side.open .side-body, .side.searching .side-body { display: flex; }
-  .side.searching:not(.open) .side-foot { display: none; }
-  .side-scroll { max-height: 52vh; }
-  .zoombar { left: var(--gutter-l); flex-direction: row; }
-  .zoombar button + button { border-top: 0; border-left: 1px solid var(--hair); }
+  .dock-add {
+    display: grid; place-items: center; flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%;
+    background: var(--accent); color: var(--on-accent); box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .dock-add svg { position: static; width: 18px; height: 18px; margin: 0; transform: none; color: inherit; }
+  .side-body { grid-area: body; display: flex; min-height: 0; }
+  .side-scroll { padding: 0 10px 4px; overscroll-behavior: contain; }
+  .side:not([data-snap="full"]) .side-scroll { overflow: hidden; }   /* menggeser isi di separuh = menarik sheet */
+  .side-label { margin-top: 6px; }
+  .navrow { min-height: 48px; padding: 10px 12px; font-size: 15.5px; }
+  .navrow .dot { margin-top: 6px; }
+  .add-row { display: flex; width: auto; margin: 0 10px; color: var(--accent); font-weight: 600; }
+  .add-row .plus { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--accent) 14%, transparent); flex: none; }
+  .add-row .plus svg { width: 13px; height: 13px; }
+  .side-foot { padding: 8px 14px 14px; }
+
+  /* alat peta: rel vertikal kanan bawah, tepat di atas dock (zona ibu jari kanan) */
+  .zoombar {
+    left: auto; right: var(--gutter-r); bottom: calc(var(--kb, 0px) + var(--dock-h, 96px) + 12px); border-radius: 22px;
+    transition: opacity var(--dur-fast) var(--ease-out-expo), transform var(--dur-fast) var(--ease-out-expo), visibility 0s;
+  }
+  .zoombar button { width: 44px; height: 44px; }
   .zoombar #zoom-in, .zoombar #zoom-out { display: none; }
-  .mob-actions {
-    position: fixed; right: var(--gutter-r); bottom: var(--bottom); z-index: 5;
-    display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px;
+  body.panel-open .zoombar, body.index-up .zoombar {
+    opacity: 0; transform: translateY(12px); visibility: hidden; pointer-events: none;
+    transition-delay: 0s, 0s, var(--dur-fast);
   }
-  .mob-actions .btn.primary { min-height: 50px; padding: 0 20px; font-size: 15px; box-shadow: var(--shadow); }
-  body.panel-open .mob-actions, body.panel-open .zoombar { display: none; }
+
+  /* panel detail: bottom sheet penuh lebar, digeser lewat pita atas (pegangan + tutup) */
   .panel {
-    top: auto; left: var(--gutter-l); right: var(--gutter-r); bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
-    width: auto; max-height: 68%;
-    animation-name: rise;
+    top: var(--sheet-top); left: 0; right: 0; bottom: var(--kb, 0px); width: auto; max-height: none;
+    border-radius: var(--r-lg) var(--r-lg) 0 0; border-bottom: 0; padding-bottom: var(--safe-b);
+    background: var(--card); -webkit-backdrop-filter: none; backdrop-filter: none; animation: none;
+    transform: translate3d(0, 100%, 0);
   }
-  @keyframes rise { from { transform: translateY(30px); opacity: .3; } }
-  .panel.closing { animation-name: panel-out-down; }
-  @keyframes panel-out-down { to { transform: translateY(30px); opacity: 0; } }
-  .flow { --pb-x: 18px; }
+  .panel.closing { animation: none; }
+  .panel:not([data-snap="full"]) { overflow-y: hidden; }
+  .panel-top { display: block; height: 44px; padding: 0; background: var(--card); touch-action: none; pointer-events: auto; }
+  .panel-top::before { margin-top: 7px; }
+  .panel-top .icon-btn { position: absolute; right: 10px; top: 4px; }
+  .panel-body { padding: 0 18px 24px; margin-top: 0; }
+  .crumbs { padding-right: 44px; }
+  .flow { --pb-x: 18px; top: 44px; background: var(--card); }
+  .panel h2 { font-size: 26px; margin-top: -4px; }
+
   /* layar kecil sering dibaca di luar ruangan: lapisan konteks tidak terlalu pudar */
   #map.focusing .node.is-sibling, #map.focusing .link.is-sibling { opacity: .72; }
   #map.focusing .node.is-distant, #map.focusing .link.is-distant { opacity: .42; }
-  .panel-body { padding: 0 18px 20px; }
-  .panel h2 { font-size: 26px; }
-  .empty { left: 50%; }
-  dialog.sheet { width: 100%; max-width: 100%; margin: auto 0 0; max-height: 94%; border-radius: var(--r-lg) var(--r-lg) 0 0; }
-  .toast { bottom: calc(var(--bottom) + 64px); }
-  body.panel-open .toast { bottom: auto; top: calc(var(--top) + 110px); }
+
+  .empty { left: 50%; top: calc(50% - var(--dock-h, 96px) / 2); }
+  .toast { bottom: auto; top: var(--top); }
+
+  /* form: sheet dari bawah, naik saat dibuka dan turun saat ditutup (closeSheet) */
+  dialog.sheet { width: 100%; max-width: 100%; margin: auto 0 0; max-height: 94dvh; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  dialog.sheet[open] { animation: sheet-in var(--dur-med) var(--ease-out-expo); }
+  dialog.sheet[open]::backdrop { animation: scrim-in var(--dur-med) var(--ease-out-expo); }
+  dialog.sheet.closing { animation: sheet-out calc(var(--dur-med) * .8) var(--ease-out-expo) forwards; pointer-events: none; }
+  dialog.sheet.closing::backdrop { animation: scrim-out calc(var(--dur-med) * .8) var(--ease-out-expo) forwards; }
+  @keyframes sheet-in { from { transform: translateY(100%); } }
+  @keyframes sheet-out { to { transform: translateY(100%); } }
+  @keyframes scrim-in { from { opacity: 0; } }
+  @keyframes scrim-out { to { opacity: 0; } }
   .seg span { font-size: 13px; }
+}
+
+/* ── Sentuh: target ≥ 44 px, respons tekan instan ──
+   Kontrol kecil yang padat (chip, breadcrumb) diperluas lewat ::after tak terlihat, supaya kepadatan visual tetap. */
+@media (pointer: coarse) {
+  .icon-btn { width: 44px; height: 44px; }
+  .icon-btn svg { width: 16px; height: 16px; }
+  .btn, .btn.small, .src .acts .btn.small { min-height: 44px; height: auto; }
+  .src .acts .icon-btn { width: 44px; height: 44px; }
+  .mini, .flow button { position: relative; }
+  .mini::after { content: ""; position: absolute; inset: -8px -4px; }
+  .flow button::after { content: ""; position: absolute; inset: -7px -3px; }
+  .crumbs button { padding: 13px 6px; margin: -13px -6px; }
+  .rowbtn { min-height: 48px; }
+  .seg span { padding: 13px 4px; }
+  .swatches { gap: 8px; }
+  .swatches span { width: 36px; height: 36px; }
+  .btn, .icon-btn, .mini, .navrow, .rowbtn, .zoombar button, .dock-add, .crumbs button, .flow button, .src .thumb {
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 90ms var(--ease-out-expo), background-color 90ms linear, color 90ms linear;
+  }
+  .btn:active, .icon-btn:active, .mini:active, .zoombar button:active, .dock-add:active, .flow button:active { transform: scale(.94); }
+  .navrow:active, .rowbtn:active, .crumbs button:active { background: var(--fill-2); }
+  #map .node.pressed .body, #map.focusing .node.pressed .body { transform: scale(.95); transition-duration: 90ms; }
 }
 @media (prefers-reduced-motion: reduce) {
   :root { --dur-fast: 0ms; --dur-med: 0ms; --dur-flow: 0ms; }
@@ -586,6 +664,7 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
 </div>
 
 <aside class="side glass" id="side" aria-label="Navigasi">
+  <div class="grab" aria-hidden="true"></div>
   <div class="side-head">
     <svg class="logo" width="30" height="30" viewBox="0 0 30 30" shape-rendering="geometricPrecision" aria-hidden="true" focusable="false">
       <rect x="2" y="2" width="16" height="6" rx="2" fill="var(--logo-layer, #1E293B)"/>
@@ -611,9 +690,16 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.8"></circle><path d="M10.6 10.6L14 14"></path></svg>
     <input type="search" id="q" placeholder="Cari materi atau sumber" autocomplete="off" spellcheck="false" aria-label="Cari" aria-controls="side-list">
     <span class="kbd" aria-hidden="true">/</span>
+    <button type="button" class="dock-add" id="m-add-mat" aria-label="Materi baru">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path></svg>
+    </button>
   </div>
   <div class="side-body">
     <div class="side-scroll" id="side-list"></div>
+    <button type="button" class="navrow add-row" id="m-add-kat">
+      <span class="plus" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></span>
+      <span class="txt"><span class="nm">Kategori baru</span></span>
+    </button>
     <div class="side-foot">
       <div class="status" id="status"></div>
     </div>
@@ -626,15 +712,6 @@ dialog.sheet::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur
   <button type="button" id="zoom-fit" aria-label="Tampilkan semua"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M15 7V3h-4M3 11v4h4M15 11v4h-4"></path></svg></button>
   <button type="button" id="tidy" aria-label="Rapikan peta" title="Rapikan peta"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="4" height="4" rx="1"></rect><rect x="12" y="2.5" width="4" height="3.5" rx="1"></rect><rect x="12" y="12" width="4" height="3.5" rx="1"></rect><path d="M6 9h2.5c1 0 1.5-.5 1.5-1.5v-1c0-1 .5-1.5 1.5-1.5H12M10 9.5v2c0 1 .5 1.5 1.5 1.5H12"></path></svg></button>
   <button type="button" id="collapse-all" aria-label="Lipat semua cabang" title="Lipat semua cabang"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"></circle><path d="M9 2v2.5M9 13.5V16M2 9h2.5M13.5 9H16"></path></svg></button>
-</div>
-
-<div class="mob-actions">
-  <button type="button" class="btn primary" id="m-add-mat">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>Materi
-  </button>
-  <button type="button" class="btn glass" id="m-add-kat">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>Kategori
-  </button>
 </div>
 
 <div class="empty glass" id="empty" hidden>
@@ -1717,7 +1794,35 @@ function ticked() {
 /* Zoom + kanvas titik tak hingga */
 const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => applyZoom(e.transform));
 svg.call(zoom).on('dblclick.zoom', null);
-svg.on('click', e => { if (e.target === svgEl) select(null, { focus: false }); });
+/* Sentuh: "terdekat menang". Kartu di zoom awal ponsel hanya ±27 px tinggi, jadi ketukan di ruang kosong memilih
+   simpul terdekat dalam radius 22 px; tiap simpul efektif punya target ≥ 44 px tanpa memperbesar atau menimpa
+   tetangganya (wilayah dibagi rata ke simpul terdekat). Umpan balik tekan muncul saat jari menyentuh, bukan saat lepas. */
+const coarseMq = matchMedia('(pointer: coarse)');
+function nodeNear(x, y, r = 22) {
+  let best = null, bd = r;
+  liveNodes().each(function (d) {
+    const b = this.querySelector('.shape').getBoundingClientRect();
+    const dx = Math.max(b.left - x, 0, x - b.right), dy = Math.max(b.top - y, 0, y - b.bottom), dist = Math.hypot(dx, dy);
+    if (dist <= bd) { bd = dist; best = this; }
+  });
+  return best;
+}
+let pressed = null, pressAt = null;
+const unpress = () => { pressed?.classList.remove('pressed'); pressed = null; };
+svgEl.addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'touch' || !e.isPrimary) return;
+  unpress();
+  pressed = e.target.closest?.('g.node:not(.exiting)') || nodeNear(e.clientX, e.clientY);
+  pressed?.classList.add('pressed');
+  pressAt = [e.clientX, e.clientY];
+});
+svgEl.addEventListener('pointermove', e => { if (pressed && pressAt && Math.hypot(e.clientX - pressAt[0], e.clientY - pressAt[1]) > 8) unpress(); });
+['pointerup', 'pointercancel'].forEach(t => svgEl.addEventListener(t, unpress));
+svg.on('click', e => {
+  if (e.target !== svgEl) return;
+  if (coarseMq.matches) { const hit = nodeNear(e.clientX, e.clientY); if (hit) return onNodeClick(hit.__data__.id); }
+  select(null, { focus: false });
+});
 
 /* Titik latar: pola di ruang layar, jarak 24·k dilipat per oktaf ke 16–44 px agar kerapatan stabil,
    jari-jari tetap agar titik tetap tajam; offset dimodulo agar angka kecil saat pan jauh. */
@@ -1770,8 +1875,11 @@ function freeRect() {
   const W = svgEl.clientWidth, H = svgEl.clientHeight;
   const pb = panelBox();
   if (isPhone()) {
-    const top = ($('#side').getBoundingClientRect().bottom || 80) + 12;
-    return { x0: 16, x1: W - 16, y0: top, y1: pb ? Math.max(top + 80, pb.top - 16) : H - 120 };   // di atas bottom sheet
+    // tanpa bilah atas: peta memakai seluruh layar dari batas aman atas sampai tepi sheet (posisi diamnya,
+    // bukan posisi animasi), yaitu panel bila terbuka, selain itu dock
+    const top = sideSheet.baseTop() + 6;
+    const edge = pb && panelSheet.snap && panelSheet.snap !== 'hidden' ? panelSheet.restTop() : sideSheet.restTop('dock');
+    return { x0: 16, x1: W - 16, y0: top, y1: Math.max(top + 80, edge - 16) };
   }
   const left = $('#side').getBoundingClientRect().right + 24;
   return { x0: left, x1: pb ? pb.left - 24 : W - 32, y0: 40, y1: H - 40 };
@@ -1980,6 +2088,10 @@ $('#side-list').addEventListener('keydown', e => {
   items[Math.max(0, Math.min(items.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))].focus();
 });
 function setMenu(open) {
+  if (phoneMq.matches) {   // di ponsel "menu" = indeks di bottom sheet: separuh atau kembali ke dock
+    if (!document.body.classList.contains('panel-open')) sideSheet.to(open ? 'half' : 'dock');
+    return;
+  }
   sideEl.classList.toggle('open', open);
   $('#menu-btn').setAttribute('aria-expanded', String(open));
 }
@@ -2012,6 +2124,205 @@ $('#status').addEventListener('click', async e => {
 /* ───────────── Panel ───────────── */
 const panelEl = $('#panel');
 const xIcon = '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>';
+
+/* ───────────── Ponsel: bottom sheet yang bisa digeser ─────────────
+   Satu mekanisme untuk dua sheet: indeks (dock → separuh → penuh) dan panel detail (judul → separuh → penuh).
+   - Posisi hanya translateY (komposit GPU, tanpa layout per frame); will-change dipasang selama bergerak saja.
+   - Jari diikuti 1:1 tanpa transisi. Dilepas: snap terdekat dari posisi yang diproyeksikan 200 ms ke depan,
+     lalu pegas teredam kritis dengan kecepatan awal = kecepatan jari. Lemparan cepat tiba lebih cepat, tidak memantul;
+     dari diam ±300 ms sampai tenang.
+   - Lewat batas atas: hambatan karet (menjelaskan "tidak bisa lebih tinggi"), bukan pantulan dekoratif.
+   - Isi yang bisa digulir hanya menggulir saat sheet penuh; di tahap lain, geser vertikal di mana pun menarik sheet,
+     dan pada keadaan penuh tarikan turun mengambil alih begitu isi sudah di puncak (pola Maps). */
+const phoneMq = matchMedia('(max-width: 760px)');
+const safeBottom = el => parseFloat(getComputedStyle(el).paddingBottom) || 0;
+function makeSheet(el, { snaps, order, zone, scroller = () => el, onSnap, onSettle, onDismiss }) {
+  let y = 0, snap = null, raf = 0, vel = 0, done = null, g = null;
+  const off = name => snaps()[name];
+  const set = v => { y = v; el.style.transform = `translate3d(0, ${Math.round(v * 10) / 10}px, 0)`; };
+  const stop = () => { cancelAnimationFrame(raf); raf = 0; };
+  const settle = () => {
+    stop(); el.style.willChange = '';
+    const cb = done; done = null; cb?.();
+    onSettle?.(snap);
+  };
+  const S = {
+    get snap() { return snap; },
+    get moving() { return !!raf || g?.mode === 'drag'; },
+    /** Pegas ke snap `name`. v0 = kecepatan awal (px/s, positif ke bawah). cb dipanggil saat tenang. */
+    to(name, v0 = 0, cb = null) {
+      snap = name; el.dataset.snap = name; done = cb;
+      onSnap?.(name);
+      stop();
+      const target = off(name);
+      if (reduceMotion || !phoneMq.matches || Math.abs(target - y) < 0.5 && Math.abs(v0) < 1) { set(target); return settle(); }
+      vel = v0; el.style.willChange = 'transform';
+      const STIFF = 420, DAMP = 2 * Math.sqrt(STIFF);   // teredam kritis
+      let last = performance.now();
+      const step = now => {
+        const dt = Math.min(0.032, Math.max(0.001, (now - last) / 1000)); last = now;
+        const tgt = off(name);                           // snap bisa bergeser (keyboard, rotasi) di tengah jalan
+        vel += (-STIFF * (y - tgt) - DAMP * vel) * dt;
+        set(y + vel * dt);
+        if (Math.abs(y - tgt) < 0.6 && Math.abs(vel) < 18) { set(tgt); return settle(); }
+        raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    },
+    /** Langsung ke snap tanpa gerak (inisialisasi, ukuran layar berubah). */
+    jump(name) { snap = name; el.dataset.snap = name; onSnap?.(name); stop(); el.style.willChange = ''; set(off(name)); },
+    /** Tepi atas sheet di layar saat diam di snap `name` (default: snap tujuan sekarang). */
+    restTop(name = snap) { return el.getBoundingClientRect().top - y + off(name); },
+    baseTop() { return el.getBoundingClientRect().top - y; },
+    reset() { stop(); g = null; snap = null; y = 0; el.style.transform = ''; el.style.willChange = ''; delete el.dataset.snap; },
+  };
+
+  const rubber = d => d * 0.32;
+  el.addEventListener('touchstart', e => {
+    if (!phoneMq.matches || e.touches.length !== 1 || !snap || snap === 'hidden') { g = null; return; }
+    const p = e.touches[0];
+    g = { x: p.clientX, y: p.clientY, base: y, mode: null, zone: !!e.target.closest(zone), was: !!raf, s: [[e.timeStamp, p.clientY]] };
+  }, { passive: true });
+  el.addEventListener('touchmove', e => {
+    if (!g || e.touches.length !== 1) return;
+    const p = e.touches[0], dx = p.clientX - g.x, dy = p.clientY - g.y;
+    if (!g.mode) {
+      if (dx === 0 && dy === 0) return;
+      const sc = scroller();
+      // arah diputuskan pada gerakan pertama, selagi touchmove masih bisa dibatalkan (sebelum browser mulai menggulir)
+      if (Math.abs(dx) > Math.abs(dy)) g.mode = 'none';                                 // geser horizontal: stepper, tabel
+      else if (g.zone || snap !== order[0] || (dy > 0 && sc.scrollTop <= 0)) g.mode = 'drag';
+      else g.mode = 'none';
+      // titik awal sentuhan tetap jadi acuan, jadi gerakan pertama ikut terhitung (sheet tidak tertinggal di belakang jari)
+      if (g.mode === 'drag') { stop(); done = null; g.base = y; el.style.willChange = 'transform'; }
+    }
+    if (g.mode !== 'drag') return;
+    e.preventDefault();
+    const lo = off(order[0]), hi = off(order[order.length - 1]);
+    let v = g.base + (p.clientY - g.y);
+    if (v < lo) v = lo - rubber(lo - v);
+    if (!onDismiss && v > hi) v = hi + rubber(v - hi);
+    set(v);
+    g.s.push([e.timeStamp, p.clientY]);
+    if (g.s.length > 6) g.s.shift();
+  }, { passive: false });
+  const end = () => {
+    if (!g) return;
+    const G = g; g = null;
+    if (G.mode !== 'drag') { if (G.was && snap) S.to(snap); return; }
+    const last = G.s[G.s.length - 1], recent = G.s.filter(q => q[0] >= last[0] - 100);
+    const v = recent.length > 1 ? (last[1] - recent[0][1]) / Math.max(8, last[0] - recent[0][0]) * 1000 : 0;
+    const low = off(order[order.length - 1]);
+    if (onDismiss && y > low + 24 && (v > 250 || y > low + 90)) return onDismiss(v);
+    const proj = Math.min(low, y + v * 0.2);
+    const best = order.reduce((a, n) => Math.abs(off(n) - proj) < Math.abs(off(a) - proj) ? n : a);
+    S.to(best, v);
+  };
+  el.addEventListener('touchend', end);
+  el.addEventListener('touchcancel', end);
+  // fokus keyboard/pembaca layar ke elemen di bawah tepi layar: buka penuh supaya yang difokus terlihat
+  el.addEventListener('focusin', e => {
+    if (!phoneMq.matches || !snap || snap === order[0] || snap === 'hidden') return;
+    if (e.target.getBoundingClientRect().bottom > innerHeight - 8) S.to(order[0]);
+  });
+  return S;
+}
+
+/** Indeks: dock (cari + tambah) → separuh (daftar peta) → penuh (hasil cari di atas keyboard). */
+const searchRow = sideEl.querySelector('.search');
+const dockVisible = () => searchRow.offsetTop + searchRow.offsetHeight + safeBottom(sideEl);
+const sideSheet = makeSheet(sideEl, {
+  zone: '.grab, .search, .side-head',
+  order: ['full', 'half', 'dock'],
+  scroller: () => $('#side-list'),
+  snaps: () => {
+    const H = sideEl.offsetHeight;
+    return { full: 0, half: Math.max(0, H - Math.round(innerHeight * 0.56)), dock: H - dockVisible(), hidden: H + 12 };
+  },
+  onSnap: name => {
+    const up = name === 'half' || name === 'full';
+    document.body.classList.toggle('index-up', up);
+    sideEl.classList.toggle('open', up);
+    $('#menu-btn').setAttribute('aria-expanded', String(up));
+    $('#menu-btn').setAttribute('aria-label', up ? 'Ciutkan daftar peta' : 'Buka daftar peta');
+  },
+  onSettle: name => { if (name === 'dock' && document.activeElement === qEl && !qEl.value) qEl.blur(); },
+});
+sideEl.querySelector('.grab').addEventListener('click', () => {
+  if (phoneMq.matches) sideSheet.to(sideSheet.snap === 'dock' ? 'half' : sideSheet.snap === 'half' ? 'full' : 'dock');
+});
+
+/** Panel detail: judul saja (peta lapang) → separuh → penuh; tarik di bawah tahap judul untuk menutup. */
+let dismissV = 0;
+const panelSheet = makeSheet(panelEl, {
+  zone: '.panel-top',
+  order: ['full', 'half', 'peek'],
+  snaps: () => {
+    const H = panelEl.offsetHeight, h2 = panelEl.querySelector('.panel-body h2');
+    const peekV = h2 ? Math.min(H * 0.45, h2.offsetTop + h2.offsetHeight + 20) : 150;
+    return { full: 0, half: Math.max(0, H - Math.round(innerHeight * 0.54)), peek: H - peekV - safeBottom(panelEl), hidden: H + 12 };
+  },
+  onSnap: name => { if (name === 'peek') panelEl.scrollTop = 0; },
+  onSettle: name => {
+    // sheet berhenti di tahap yang menyisakan peta: pastikan simpul terpilih ada di area bebas yang baru
+    if ((name === 'peek' || name === 'half') && selectedId && pos.get(selectedId)) {
+      const d = pos.get(selectedId), R = freeRect(), sx = T.x + K * d.x, sy = T.y + K * d.y;
+      if (sx < R.x0 || sx > R.x1 || sy < R.y0 || sy > R.y1) focusNode(selectedId);
+    }
+  },
+  onDismiss: v => { dismissV = v; select(null, { focus: false }); },
+});
+
+/** Ponsel ↔ desktop, rotasi, keyboard: hitung ulang snap tanpa animasi. --kb = tinggi keyboard (iOS tidak
+ *  mengecilkan layout viewport), --dock-h = tinggi dock yang terlihat (dipakai rel alat & kartu kosong). */
+function syncSheets() {
+  const vv = window.visualViewport, root = document.documentElement.style;
+  const kb = vv && phoneMq.matches ? Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)) : 0;
+  root.setProperty('--kb', kb + 'px');
+  if (!phoneMq.matches) {
+    sideSheet.reset(); panelSheet.reset();
+    document.body.classList.remove('index-up');
+    sideEl.classList.remove('open');
+    return;
+  }
+  root.setProperty('--dock-h', dockVisible() + 'px');
+  if (sideSheet.moving || panelSheet.moving) return;
+  const open = !panelEl.hidden && !isClosing();
+  sideSheet.jump(open ? 'hidden' : (sideSheet.snap && sideSheet.snap !== 'hidden' ? sideSheet.snap : 'dock'));
+  if (open) panelSheet.jump(panelSheet.snap && panelSheet.snap !== 'hidden' ? panelSheet.snap : 'half');
+}
+phoneMq.addEventListener('change', syncSheets);
+window.visualViewport?.addEventListener('resize', syncSheets);
+addEventListener('resize', syncSheets);
+
+/* Pencarian di ponsel: sheet naik penuh supaya hasil terlihat di atas keyboard; batal mengembalikan ke dock */
+qEl.addEventListener('focus', () => { if (phoneMq.matches && !document.body.classList.contains('panel-open')) sideSheet.to('full'); });
+qEl.addEventListener('blur', () => {
+  if (!phoneMq.matches || qEl.value || document.body.classList.contains('panel-open')) return;
+  setTimeout(() => { if (document.activeElement !== qEl && !qEl.value && sideSheet.snap === 'full') sideSheet.to('dock'); }, 120);
+});
+
+/* Dialog form di ponsel: turun dulu (menjelaskan ke mana ia pergi), baru ditutup. Membuka lagi di tengah turun
+   membatalkannya. Desktop dan reduced-motion menutup langsung. */
+function closeSheet(dlg) {
+  if (!dlg.open || dlg.classList.contains('closing')) return;
+  const { ms } = motion('--dur-med');
+  if (!ms || !phoneMq.matches) return dlg.close();
+  dlg.classList.add('closing');
+  const fin = () => {
+    clearTimeout(timer); dlg.removeEventListener('animationend', onEnd);
+    if (!dlg.classList.contains('closing')) return;
+    dlg.classList.remove('closing'); dlg.close();
+  };
+  const onEnd = e => { if (e.target === dlg) fin(); };
+  const timer = setTimeout(fin, ms + 150);
+  dlg.addEventListener('animationend', onEnd);
+}
+document.querySelectorAll('dialog.sheet').forEach(dlg => {
+  const show = dlg.showModal.bind(dlg);
+  dlg.showModal = () => { if (dlg.classList.contains('closing')) { dlg.classList.remove('closing'); return; } show(); };
+  dlg.addEventListener('cancel', e => { if (dlg.id !== 'dlg-login' && phoneMq.matches) { e.preventDefault(); closeSheet(dlg); } });
+});
 const pencil = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 2.8l2.7 2.7L6 12.7 2.8 13.2l.5-3.2z"></path></svg>';
 const plus = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>';
 const branch = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="4" cy="3.5" r="1.8"></circle><circle cx="12" cy="8" r="1.8"></circle><circle cx="4" cy="12.5" r="1.8"></circle><path d="M4 5.3v5.4M5.6 4.4c3 .6 4.3 1.8 4.6 3.1"></path></svg>';
@@ -2336,14 +2647,23 @@ function finishClose() {
   clearTimeout(closeTimer); closeTimer = null;
   panelEl.classList.remove('closing');
   panelEl.hidden = true; panelEl.innerHTML = ''; delete panelEl.dataset.id;
+  if (phoneMq.matches) panelSheet.reset();
 }
 function closePanel() {
   if (panelEl.hidden) { panelEl.innerHTML = ''; return; }
   if (isClosing()) return;
   flipDone?.();
   const { ms } = motion('--dur-fast');
+  const v = dismissV; dismissV = 0;
+  if (phoneMq.matches) sideSheet.to('dock');   // dock naik kembali selagi panel turun: tempatnya bertukar
   if (!ms) return finishClose();
   panelEl.classList.add('closing');
+  if (phoneMq.matches) {
+    // turun ke bawah layar dengan kecepatan lemparan jari (bila ditutup dengan menggeser), baru disembunyikan
+    panelSheet.to('hidden', v, finishClose);
+    closeTimer = setTimeout(finishClose, 1200);
+    return;
+  }
   closeTimer = setTimeout(finishClose, ms + 150);   // cadangan bila animationend tidak datang
 }
 panelEl.addEventListener('animationend', e => { if (e.target === panelEl && isClosing()) finishClose(); });
@@ -2370,7 +2690,14 @@ function renderPanel() {
     + (n.kind === 'mat' ? materiPanel(n) : kategoriPanel(n));
   panelEl.querySelectorAll('.ico img').forEach(img => img.addEventListener('error', () => { img.replaceWith(document.createRange().createContextualFragment(kindIcon.web)); }));
   panelEl.hidden = false;
-  if (reopening) { panelEl.style.animation = 'none'; void panelEl.offsetWidth; panelEl.style.animation = ''; }
+  if (phoneMq.matches) {
+    if (!wasOpen) {
+      // naik dari bawah (dari tempat dock) ke separuh; dibuka lagi di tengah turun: berbalik dari posisi saat ini
+      if (!reopening) panelSheet.jump('hidden');
+      panelSheet.to(srcFocus ? 'full' : 'half');
+      sideSheet.to('hidden');
+    } else if (panelSheet.snap === 'peek' && !panelSheet.moving) panelSheet.to('peek');   // tinggi judul bisa berubah
+  } else if (reopening) { panelEl.style.animation = 'none'; void panelEl.offsetWidth; panelEl.style.animation = ''; }
   if (dir && motion().ms) panelEl.querySelector('.panel-body')?.classList.add('enter-' + dir);
   if (wasOpen && same) panelEl.scrollTop = scroll; else panelEl.scrollTop = 0;
   syncFlow();
@@ -2601,7 +2928,7 @@ $('#form-conv').addEventListener('submit', async e => {
     if (cctx.keep) await saveMat({ ...m, kategori_id: k.id, judul: $('#fc-materi').value.trim() || 'Pengantar' });
     else await removeMat(m.id);
     expanded.add(m.kategori_id); expanded.add(k.id); saveOpen();
-    dlgC.close();
+    closeSheet(dlgC);
     refresh(0.5);
     select(k.id);
     toast('Sekarang jadi subkategori. Tambahkan sub-topiknya lewat tombol Materi.');
@@ -2781,7 +3108,7 @@ $('#form-kat').addEventListener('submit', async e => {
   try {
     const saved = await saveKat({ ...(old || {}), id: old?.id || uuid(), nama, parent_id, warna: warna || null });
     if (parent_id) { expanded.add(parent_id); saveOpen(); }
-    dlgK.close();
+    closeSheet(dlgK);
     refresh(old ? 0.2 : 0.6);
     select(saved.id);
     toast(old ? 'Perubahan disimpan' : parent_id ? 'Subkategori dibuat' : 'Kategori dibuat');
@@ -2819,7 +3146,7 @@ $('#form-mat').addEventListener('submit', async e => {
   try {
     const saved = await saveMat({ ...(old || {}), id: old?.id || uuid(), kategori_id, judul, catatan: $('#fm-catatan').value.trim() || null });
     expanded.add(kategori_id); saveOpen();
-    dlgM.close();
+    closeSheet(dlgM);
     refresh(old ? 0.2 : 0.5);
     select(saved.id);
     if (!old) { srcEdit = { materiId: saved.id, id: null }; renderPanel(); focusSrcForm(); }
@@ -2859,7 +3186,7 @@ $('#form-split').addEventListener('submit', async e => {
     const c = await saveKat({ id: uuid(), nama: nk, parent_id: m.kategori_id, warna: null });
     await saveMat({ ...m, kategori_id: c.id, judul: nm });
     expanded.add(m.kategori_id); expanded.add(c.id); saveOpen();
-    dlgS.close();
+    closeSheet(dlgS);
     refresh(0.6);
     select(c.id);
     toast(`${nk} sekarang subkategori. Tambah sub-materi lewat tombol + Materi.`);
@@ -2870,8 +3197,8 @@ $('#form-split').addEventListener('submit', async e => {
 /* ───────────── Dialog umum ───────────── */
 document.querySelectorAll('dialog.sheet').forEach(dlg => {
   dlg.addEventListener('click', e => {
-    if (e.target.closest('[data-close]')) dlg.close();
-    else if (e.target === dlg && dlg.id !== 'dlg-login') dlg.close();
+    if (e.target.closest('[data-close]')) closeSheet(dlg);
+    else if (e.target === dlg && dlg.id !== 'dlg-login') closeSheet(dlg);
   });
 });
 
@@ -2957,6 +3284,7 @@ function layoutFresh() {
   renderStatus();
   applyHighlight();
   $('#empty').hidden = kat.length > 0 || !loaded;
+  syncSheets();   // status/hasil render bisa mengubah tinggi baris dock
   fit(false);
 }
 async function loadAll() {
@@ -2972,6 +3300,7 @@ async function loadAll() {
   } finally { loading = false; }
 }
 async function boot() {
+  syncSheets();   // ponsel: dock di posisinya sebelum peta pertama dibingkai (fit membaca tepi dock)
   applyZoom(d3.zoomIdentity);
   D = derive();
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY && !DEMO) {
