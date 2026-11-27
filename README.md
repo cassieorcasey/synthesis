@@ -1,5 +1,7 @@
 # Synthesis
 
+> **In English:** A mind map of study materials: nested categories with videos, web pages, PDFs and files attached. One static HTML file (D3) with Supabase for storage. The rest of this page is in Indonesian.
+
 Peta materi belajar dalam bentuk graf yang bergerak. Kategori bersarang bebas (Matematika → Aljabar Linear → …), materi di dalamnya, dan sumber belajar (YouTube, web, PDF, atau file milik sendiri) di panel samping.
 
 ## File
